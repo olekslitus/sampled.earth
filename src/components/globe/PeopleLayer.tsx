@@ -12,6 +12,7 @@ import type { Simulation } from "@/lib/sim/engine"
 import type { CompiledFilter } from "@/lib/sim/filter"
 import { PERSON_RADIUS } from "@/lib/sim/sphere"
 import type { ExtraPick } from "./DisasterLayer"
+import type { MapStyle } from "./satellite"
 import { hexToRgb, pointSizeFor } from "./util"
 
 const pointsVertex = /* glsl */ `
@@ -35,13 +36,16 @@ const pointsVertex = /* glsl */ `
   }
 `
 const pointsFragment = /* glsl */ `
+  uniform float uRing;
   varying vec3 vColor;
   varying float vAlpha;
   void main() {
     vec2 c = gl_PointCoord - 0.5;
     float d = length(c);
     if (d > 0.5) discard;
-    gl_FragColor = vec4(vColor, vAlpha * smoothstep(0.5, 0.32, d));
+    // a dark rim keeps dots readable over busy satellite imagery
+    vec3 color = mix(vColor, vec3(0.02, 0.03, 0.06), uRing * smoothstep(0.24, 0.36, d));
+    gl_FragColor = vec4(color, vAlpha * smoothstep(0.5, 0.32, d));
   }
 `
 
@@ -54,6 +58,7 @@ export interface PeopleProps {
   selectedId: number | null
   hoveredId: number | null
   theme: Theme
+  mapStyle: MapStyle
   filter: CompiledFilter | null
   filterMode: "grey" | "hide"
   /** per-slot base point size (0 = not drawn); shared with the picker */
@@ -81,7 +86,7 @@ class Range {
   }
 }
 
-export function People({ sim, scheme, hidden, selectedId, hoveredId, sizesRef, theme, filter, filterMode }: PeopleProps) {
+export function People({ sim, scheme, hidden, selectedId, hoveredId, sizesRef, theme, mapStyle, filter, filterMode }: PeopleProps) {
   const dpr = useThree((s) => s.viewport.dpr)
   const cap = sim.capacity
   const { geometry, colors, sizes, renderSizes } = useMemo(() => {
@@ -105,7 +110,7 @@ export function People({ sim, scheme, hidden, selectedId, hoveredId, sizesRef, t
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
-        uniforms: { uSize: { value: 2 } },
+        uniforms: { uSize: { value: 2 }, uRing: { value: 0 } },
         vertexShader: pointsVertex,
         fragmentShader: pointsFragment,
         transparent: true,
@@ -115,6 +120,9 @@ export function People({ sim, scheme, hidden, selectedId, hoveredId, sizesRef, t
     [],
   )
   useEffect(() => () => material.dispose(), [material])
+  useEffect(() => {
+    material.uniforms.uRing.value = mapStyle === "satellite" ? 1 : 0
+  }, [material, mapStyle])
 
   const palette = useMemo(() => schemeColors(scheme, theme).map(hexToRgb), [scheme, theme])
   const last = useRef({

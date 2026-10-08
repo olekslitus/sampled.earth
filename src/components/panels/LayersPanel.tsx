@@ -1,13 +1,15 @@
 "use client"
 
 import type { RefObject } from "react"
-import { Baby, PawPrint, RefreshCw, Siren, Tornado } from "lucide-react"
+import { Baby, Cloud, CloudRain, MapIcon, PawPrint, RefreshCw, Satellite, Siren, Tornado } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { AnimalMarker } from "@/components/AnimalMarker"
 import { LEVEL_STYLE } from "@/components/globe/UnrestLayer"
+import type { MapStyle } from "@/components/globe/satellite"
 import { emptyVitalStats, type VitalStats } from "@/components/globe/VitalLayer"
 import { usePolled } from "@/components/hooks"
 import { SPECIES, iconCount, type Species } from "@/lib/sim/animals"
@@ -15,6 +17,7 @@ import { DISASTER_KINDS, bySeverity, type Disaster, type DisasterFeed, type Disa
 import { COUNTRY_BY_NAME } from "@/lib/sim/countries"
 import { HOTSPOTS, UNREST_LEVELS, UNREST_SOURCE_NOTE, type Hotspot } from "@/lib/sim/unrest"
 import type { Theme } from "@/lib/sim/attributes"
+import type { WeatherIndex } from "@/lib/weather/live"
 import { cn } from "@/lib/utils"
 import { AlertBadge, KIND_ICON, timeAgo } from "./DisasterCard"
 
@@ -40,6 +43,16 @@ export function speciesHome(s: Species): { lat: number; lon: number; alt: number
 
 interface LayersPanelProps {
   theme: Theme
+  mapStyle: MapStyle
+  onMapStyle: (s: MapStyle) => void
+  sentinel: boolean
+  onSentinel: (on: boolean) => void
+  weather: WeatherIndex | null
+  weatherError: boolean
+  showClouds: boolean
+  onShowClouds: (v: boolean) => void
+  showPrecip: boolean
+  onShowPrecip: (v: boolean) => void
   showVital: boolean
   onShowVital: (v: boolean) => void
   /** written by the globe's births & deaths layer; sampled here a few times a second */
@@ -67,6 +80,56 @@ export function LayersPanel(props: LayersPanelProps) {
 
   return (
     <div className="space-y-5">
+      {/* Surface ------------------------------------------------------------------- */}
+      <section className="space-y-2">
+        <ToggleGroup
+          variant="outline"
+          size="sm"
+          spacing={0}
+          className="w-full"
+          aria-label="Globe surface"
+          value={[props.mapStyle]}
+          onValueChange={(v) => v[0] && props.onMapStyle(v[0] as MapStyle)}
+        >
+          <ToggleGroupItem value="map" className="flex-1 text-xs">
+            <MapIcon /> Map
+          </ToggleGroupItem>
+          <ToggleGroupItem value="satellite" className="flex-1 text-xs">
+            <Satellite /> Satellite
+          </ToggleGroupItem>
+        </ToggleGroup>
+        {props.mapStyle === "satellite" && (
+          <>
+            <p className="text-[11px] text-muted-foreground">
+              NASA Blue Marble for the month on the clock, with Black Marble city lights after dark.
+            </p>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="sentinel" className="text-xs font-normal">
+                Sentinel-2 close-ups (10 m)
+              </Label>
+              <Switch id="sentinel" size="sm" checked={props.sentinel} onCheckedChange={props.onSentinel} />
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* Weather ------------------------------------------------------------------- */}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="clouds" className="flex items-center gap-2 text-sm font-medium">
+            <Cloud className="size-4" /> Clouds
+          </Label>
+          <Switch id="clouds" size="sm" checked={props.showClouds} onCheckedChange={props.onShowClouds} />
+        </div>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="precip" className="flex items-center gap-2 text-sm font-medium">
+            <CloudRain className="size-4" /> Rain & snow
+          </Label>
+          <Switch id="precip" size="sm" checked={props.showPrecip} onCheckedChange={props.onShowPrecip} />
+        </div>
+        {(props.showClouds || props.showPrecip) && <WeatherNote weather={props.weather} error={props.weatherError} />}
+      </section>
+
       {/* Births & deaths ----------------------------------------------------------- */}
       <section className="space-y-2">
         <div className="flex items-center justify-between">
@@ -272,5 +335,23 @@ function DisastersSection(props: LayersPanelProps) {
         </>
       )}
     </section>
+  )
+}
+
+/** "14:30 UTC", or "yesterday 22:30 UTC" */
+function utcTime(iso: string) {
+  const d = new Date(iso)
+  const hm = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`
+  const days = Math.round((Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()) - Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())) / 86_400_000)
+  return days === 0 ? hm : days === 1 ? `yesterday ${hm}` : `${d.toISOString().slice(0, 10)} ${hm}`
+}
+
+function WeatherNote({ weather, error }: { weather: WeatherIndex | null; error: boolean }) {
+  if (!weather) return <p className="text-[11px] text-muted-foreground">{error ? "Couldn’t load the weather." : "Loading the latest weather…"}</p>
+  return (
+    <p className="text-[11px] leading-snug text-muted-foreground">
+      Real observations, not the simulated time. Clouds at {utcTime(weather.clouds.time)} from {weather.clouds.satellites.length} weather
+      satellites; {weather.precip ? <>rain and snow at {utcTime(weather.precip.time)} from NASA IMERG, which runs a few hours behind.</> : <>rain and snow are unavailable right now.</>}
+    </p>
   )
 }

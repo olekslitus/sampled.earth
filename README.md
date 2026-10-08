@@ -21,6 +21,19 @@ Country statistics come from the World Bank World Development Indicators. Among 
 bun scripts/fetch-data.ts
 ```
 
+The Satellite style uses NASA Blue Marble (one image per month) and Black Marble city lights, stored in `public/earth/`. Zoomed in, sharper tiles load from Vercel Blob (NASA, down to 0.6 km a pixel) and then from EOxCloudless Sentinel-2 (10 m). To rebuild them:
+
+```bash
+bun scripts/fetch-imagery.ts                          # whole-globe images in public/earth/
+bun --env-file=.env.local scripts/build-tiles.ts      # zoom tiles to Blob (needs BLOB_READ_WRITE_TOKEN)
+```
+
+Live weather (clouds from five geostationary satellites, rain and snow from NASA IMERG) is rebuilt every 15 minutes by a Vercel cron that calls `/api/weather` (see `vercel.json`; needs `CRON_SECRET` and `BLOB_READ_WRITE_TOKEN`). To run it by hand:
+
+```bash
+bun --env-file=.env.local scripts/update-weather.ts
+```
+
 Natural disasters load live in the browser from USGS, GDACS and NASA EONET. Every source and assumption is listed on the [methodology page](https://sampled.earth/methodology) (`src/app/methodology/page.tsx`).
 
 ## Stack

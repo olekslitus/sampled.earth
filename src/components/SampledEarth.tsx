@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react"
 
 import { ControlPanel, SettingsTab, SPEEDS, ViewTab, type ControlTab } from "@/components/ControlPanel"
-import Globe, { type FlyTarget, type GlobeProps } from "@/components/globe/Globe"
+import Globe, { type FlyTarget, type GlobeProps, type MapStyle } from "@/components/globe/Globe"
+import { SENTINEL_ATTRIBUTION } from "@/components/globe/tiles"
 import { emptyVitalStats, type VitalStats } from "@/components/globe/VitalLayer"
 import { HotspotCard } from "@/components/HotspotCard"
 import { PersonCard } from "@/components/PersonCard"
@@ -18,6 +19,7 @@ import { DEFAULT_DATING, type DatingPrefs, type MeProfile } from "@/lib/sim/me"
 import type { Hotspot } from "@/lib/sim/unrest"
 import type { Disaster, DisasterKind } from "@/lib/disasters"
 import { useDisasters } from "@/lib/useDisasters"
+import { useWeather } from "@/lib/weather/live"
 
 /** Read a saved value; storage can be unavailable (private mode, blocked site data) */
 function load<T>(key: string, fallback: T): T {
@@ -26,6 +28,14 @@ function load<T>(key: string, fallback: T): T {
     return raw ? { ...fallback, ...JSON.parse(raw) } : fallback
   } catch {
     return fallback
+  }
+}
+/** A remembered on/off switch that defaults to on */
+function loadFlag(key: string) {
+  try {
+    return localStorage.getItem(key) !== "off"
+  } catch {
+    return true
   }
 }
 function save(key: string, value: unknown) {
@@ -94,6 +104,37 @@ export default function SampledEarth() {
     setTheme(next)
     save("theme", next)
   }
+
+  const [mapStyle, setMapStyle] = useState<MapStyle>(() => {
+    try {
+      return localStorage.getItem("mapStyle") === "map" ? "map" : "satellite"
+    } catch {
+      return "satellite"
+    }
+  })
+  const changeMapStyle = (next: MapStyle) => {
+    setMapStyle(next)
+    save("mapStyle", next)
+  }
+  const [sentinel, setSentinel] = useState(() => loadFlag("sentinel"))
+  const changeSentinel = (on: boolean) => {
+    setSentinel(on)
+    save("sentinel", on ? "on" : "off")
+  }
+  // live weather, both layers on unless turned off before
+  const [showClouds, setShowClouds] = useState(() => loadFlag("clouds"))
+  const [showPrecip, setShowPrecip] = useState(() => loadFlag("precip"))
+  const changeClouds = (on: boolean) => {
+    setShowClouds(on)
+    save("clouds", on ? "on" : "off")
+  }
+  const changePrecip = (on: boolean) => {
+    setShowPrecip(on)
+    save("precip", on ? "on" : "off")
+  }
+  const { index: weather, error: weatherError } = useWeather(showClouds || showPrecip)
+  /** Sentinel-2 imagery is on screen, so its attribution must be too */
+  const [sentinelShown, setSentinelShown] = useState(false)
 
   const [speed, setSpeed] = useState("600")
   const speedRef = useRef(600)
@@ -275,6 +316,12 @@ export default function SampledEarth() {
           altitudeRef={altitudeRef}
           flyToRef={flyToRef}
           theme={theme}
+          mapStyle={mapStyle}
+          sentinel={sentinel}
+          onSentinelShown={setSentinelShown}
+          weather={weather}
+          showClouds={showClouds}
+          showPrecip={showPrecip}
           filter={filter}
           filterMode={filterMode}
           showVital={showVital}
@@ -352,6 +399,16 @@ export default function SampledEarth() {
         layers={
           <LayersPanel
             theme={theme}
+            mapStyle={mapStyle}
+            onMapStyle={changeMapStyle}
+            sentinel={sentinel}
+            onSentinel={changeSentinel}
+            weather={weather}
+            weatherError={weatherError}
+            showClouds={showClouds}
+            onShowClouds={changeClouds}
+            showPrecip={showPrecip}
+            onShowPrecip={changePrecip}
             showVital={showVital}
             onShowVital={(v) => {
               vitalRef.current = emptyVitalStats()
@@ -416,6 +473,16 @@ export default function SampledEarth() {
 
       {!hintDone && !personShown && !disasterShown && !hotspotShown && <TapHint />}
       <StatusBar sim={sim} altitudeRef={altitudeRef} showVital={showVital} vitalRef={vitalRef} hasSelection={personShown} />
+      {mapStyle === "satellite" && sentinelShown && (
+        <a
+          href={SENTINEL_ATTRIBUTION.href}
+          target="_blank"
+          rel="noreferrer"
+          className="absolute right-2 bottom-16 z-20 max-w-[calc(100%-1rem)] rounded bg-background/60 px-1.5 py-0.5 text-[10px] text-muted-foreground backdrop-blur hover:text-foreground md:right-4 md:bottom-1"
+        >
+          {SENTINEL_ATTRIBUTION.text}
+        </a>
+      )}
     </main>
   )
 }

@@ -1,16 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <radialGradient id="globe" cx="0.36" cy="0.32" r="0.75">
-      <stop offset="0" stop-color="#2b4377"/>
-      <stop offset="1" stop-color="#0e1730"/>
-    </radialGradient>
-  </defs>
-  <circle cx="32" cy="32" r="30" fill="url(#globe)"/>
-  <circle cx="32" cy="32" r="29.25" fill="none" stroke="#5a78b8" stroke-opacity="0.55" stroke-width="1.5"/>
-  <ellipse cx="32" cy="32" rx="12.5" ry="29.25" fill="none" stroke="#5a78b8" stroke-opacity="0.35" stroke-width="1.5"/>
-  <circle cx="22" cy="22" r="5.5" fill="#4f9bff"/>
-  <circle cx="42" cy="20" r="5.5" fill="#f28c38"/>
-  <circle cx="35" cy="38" r="5.5" fill="#2ec68e"/>
-  <circle cx="19" cy="41" r="5.5" fill="#a99bff"/>
-  <circle cx="47" cy="42" r="4.5" fill="#f2c12e"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><style>svg{color:#1f6fd1}@media (prefers-color-scheme:dark){svg{color:#6aa8ff}}</style><g transform="translate(0 0)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.54 15H17a2 2 0 0 0-2 2v4.54"/><path d="M7 3.34V5a3 3 0 0 0 3 3a2 2 0 0 1 2 2c0 1.1.9 2 2 2a2 2 0 0 0 2-2c0-1.1.9-2 2-2h3.17"/><path d="M11 21.95V18a2 2 0 0 0-2-2a2 2 0 0 1-2-2v-1a2 2 0 0 0-2-2H2.05"/><circle cx="12" cy="12" r="10"/></g></svg>

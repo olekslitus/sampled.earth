@@ -8,7 +8,7 @@ import wdi from "@/lib/sim/data/wdi.json"
 import { politicsOf } from "@/lib/sim/politics"
 
 export const metadata: Metadata = {
-  title: "Methodology & sources",
+  title: "Methodology & Sources",
   description: "How Sampled Earth generates its synthetic people, where every number comes from, and what it gets wrong.",
   // child openGraph replaces the layout's, so the site name is repeated
   openGraph: { siteName: "Sampled Earth", url: "/methodology" },
@@ -77,7 +77,7 @@ export default function MethodologyPage() {
           <ArrowLeft className="size-4" /> Back to the globe
         </Link>
 
-        <h1 className="mt-6 text-3xl font-semibold tracking-tight">Methodology & sources</h1>
+        <h1 className="mt-6 text-3xl font-semibold tracking-tight">Methodology & Sources</h1>
         <p className="mt-3 text-lg leading-relaxed text-muted-foreground">
           Every dot on the globe is a synthetic person: not a real individual, but someone drawn at random so that, together,
           they match published statistics for {TOTAL} countries covering {(WORLD_M / 1000).toFixed(2)} billion people.
@@ -246,6 +246,39 @@ export default function MethodologyPage() {
             <li>
               <b>Borders</b>: Natural Earth via the <code className="rounded bg-muted px-1 py-0.5 text-sm">world-atlas</code>{" "}
               package (1:50m, and 1:10m when zoomed in).
+            </li>
+            <li>
+              <b>Satellite imagery</b>: NASA{" "}
+              <a className="underline underline-offset-2" href="https://visibleearth.nasa.gov/collection/1484/blue-marble">
+                Blue Marble: Next Generation
+              </a>{" "}
+              (cloud-free monthly mosaics of 2004, shown for the month on the clock) and{" "}
+              <a className="underline underline-offset-2" href="https://earthobservatory.nasa.gov/features/NightLights">
+                Black Marble
+              </a>{" "}
+              2016 city lights, via NASA Visible Earth and{" "}
+              <a className="underline underline-offset-2" href="https://earthdata.nasa.gov/gibs">GIBS</a>. Public domain. Both are cut
+              into zoom tiles down to 0.6 km a pixel.
+            </li>
+            <li>
+              <b>Close-up imagery</b>:{" "}
+              <a className="underline underline-offset-2" href="https://cloudless.eox.at">
+                EOxCloudless
+              </a>{" "}
+              by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2024), a cloud-free Sentinel-2 mosaic at 10 m, used under
+              its non-commercial licence (CC BY-NC-SA 4.0).
+            </li>
+            <li>
+              <b>Live weather</b>: clouds from the infrared channel of five geostationary satellites, refreshed every 15 minutes: GOES-East,
+              GOES-West and Himawari via NASA GIBS, and Meteosat 0° and Indian Ocean via{" "}
+              <a className="underline underline-offset-2" href="https://view.eumetsat.int">EUMETView</a> (© EUMETSAT). Cold cloud tops are
+              shown as cloud, so cold ground in winter can pass for thin cloud, and the poles, which these satellites see edge-on, fade out.
+              Rain and snow are NASA{" "}
+              <a className="underline underline-offset-2" href="https://gpm.nasa.gov/data/imerg">
+                GPM IMERG
+              </a>{" "}
+              half-hourly precipitation, which arrives a few hours after the fact. Weather is always the latest observation, not the
+              simulated time.
             </li>
             <li>
               <b>Icons and flags</b>: <a className="underline underline-offset-2" href="https://lucide.dev">Lucide</a> (ISC

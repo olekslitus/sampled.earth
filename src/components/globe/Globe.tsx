@@ -12,13 +12,17 @@ import type { Disaster } from "@/lib/disasters"
 import { AnimalLayer } from "./AnimalLayer"
 import { CameraRig, SimDriver, type FlyTarget } from "./CameraRig"
 import { DisasterLayer, type ExtraPick } from "./DisasterLayer"
-import { Atmosphere, Borders, Earth } from "./EarthLayers"
+import { Atmosphere, Borders, Earth, SatelliteEarth } from "./EarthLayers"
 import { CityLabels, HoverLabel, SelectionMarker } from "./Labels"
 import { People, Picker } from "./PeopleLayer"
+import type { MapStyle } from "./satellite"
 import { UnrestLayer } from "./UnrestLayer"
 import { VitalLayer, type VitalStats } from "./VitalLayer"
+import { WeatherLayer } from "./WeatherLayer"
+import type { WeatherIndex } from "@/lib/weather/live"
 
 export { MIN_ALTITUDE, type FlyTarget } from "./CameraRig"
+export type { MapStyle } from "./satellite"
 
 export interface GlobeProps {
   sim: Simulation
@@ -38,6 +42,15 @@ export interface GlobeProps {
   /** written every frame so the UI can show altitude */
   altitudeRef: RefObject<number>
   theme: Theme
+  mapStyle: MapStyle
+  /** Sentinel-2 close-ups on the satellite globe */
+  sentinel: boolean
+  /** told when Sentinel-2 imagery appears on or leaves the screen, for its attribution */
+  onSentinelShown: (shown: boolean) => void
+  /** newest live weather images (null until loaded or when both layers are off) */
+  weather: WeatherIndex | null
+  showClouds: boolean
+  showPrecip: boolean
   filter: CompiledFilter | null
   /** what happens to people outside the filter */
   filterMode: "grey" | "hide"
@@ -75,9 +88,24 @@ function Globe(props: GlobeProps) {
       <color attach="background" args={[BACKGROUND[props.theme]]} />
       {props.theme === "dark" && <Stars radius={80} depth={60} count={4000} factor={2.2} saturation={0} fade speed={0.3} />}
       <SimDriver sim={props.sim} speedRef={props.speedRef} detailEnabled={props.detailEnabled} altitudeRef={props.altitudeRef} />
-      <Earth sim={props.sim} showNight={props.showNight} theme={props.theme} />
+      {props.mapStyle === "satellite" ? (
+        <SatelliteEarth sim={props.sim} showNight={props.showNight} sentinel={props.sentinel} onSentinelShown={props.onSentinelShown} />
+      ) : (
+        <Earth sim={props.sim} showNight={props.showNight} theme={props.theme} />
+      )}
       <Atmosphere theme={props.theme} />
-      <Borders theme={props.theme} />
+      {props.weather && (
+        <WeatherLayer
+          sim={props.sim}
+          index={props.weather}
+          showClouds={props.showClouds}
+          showPrecip={props.showPrecip}
+          showNight={props.showNight}
+          mapStyle={props.mapStyle}
+          theme={props.theme}
+        />
+      )}
+      <Borders theme={props.theme} mapStyle={props.mapStyle} />
       {props.showUnrest && <UnrestLayer onPick={props.onPickHotspot} />}
       <People
         sim={props.sim}
@@ -86,6 +114,7 @@ function Globe(props: GlobeProps) {
         selectedId={props.selectedId}
         hoveredId={props.hoveredId}
         theme={props.theme}
+        mapStyle={props.mapStyle}
         filter={props.filter}
         filterMode={props.filterMode}
         sizesRef={sizesRef}
@@ -102,7 +131,7 @@ function Globe(props: GlobeProps) {
           onPick={props.onPickDisaster}
         />
       )}
-      <CityLabels theme={props.theme} />
+      <CityLabels theme={props.mapStyle === "satellite" ? "dark" : props.theme} />
       {props.selectedId != null && <SelectionMarker sim={props.sim} id={props.selectedId} />}
       {props.hoveredId != null && props.hoveredId !== props.selectedId && <HoverLabel sim={props.sim} id={props.hoveredId} />}
       <Picker sim={props.sim} sizesRef={sizesRef} extraRef={extraPickRef} onSelect={props.onSelect} onHover={props.onHover} />

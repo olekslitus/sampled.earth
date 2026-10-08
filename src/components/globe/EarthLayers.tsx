@@ -12,6 +12,8 @@ import type { LatLon } from "@/lib/sim/population"
 import { latLonToXYZ } from "@/lib/sim/sphere"
 import { loadBorderLines, prefetchBorderLines, type BorderDetail } from "./borders"
 import { disposeEarthTexture, loadEarthTexture, placeholderEarthTexture, readyEarthTexture } from "./earth-texture"
+import { dayImageUrl, loadImageTexture, nightImageUrl, releaseImageTexture, SATELLITE_SHADING, type MapStyle } from "./satellite"
+import { SatelliteTiles } from "./SatelliteTiles"
 
 const earthVertex = /* glsl */ `
   varying vec2 vUv;
@@ -95,6 +97,161 @@ export function Earth({ sim, showNight, theme }: { sim: Simulation; showNight: b
   )
 }
 
+const satelliteFragment = /* glsl */ `
+  uniform sampler2D dayA;
+  uniform sampler2D dayB;
+  uniform float dayMix;
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  ${SATELLITE_SHADING}
+  void main() {
+    vec3 day = mix(texture2D(dayA, vUv).rgb, texture2D(dayB, vUv).rgb, dayMix);
+    gl_FragColor = vec4(satelliteShade(day, texture2D(lights, vUv).rgb, vNormal), 1.0);
+  }
+`
+
+/** One-pixel stand-ins (deep ocean, night sky) until the imagery arrives */
+function solidTexture(hex: string) {
+  const [r, g, b] = hexBytes(hex)
+  const tex = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1)
+  tex.needsUpdate = true
+  return tex
+}
+function hexBytes(hex: string) {
+  const n = parseInt(hex.slice(1), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+/**
+ * The satellite globe: NASA Blue Marble for the month of the simulated date (fading into
+ * the next as the months turn) and Black Marble city lights on the night side.
+ */
+export function SatelliteEarth({
+  sim, showNight, sentinel, onSentinelShown,
+}: {
+  sim: Simulation
+  showNight: boolean
+  /** Sentinel-2 close-ups below 0.6 km a pixel */
+  sentinel: boolean
+  onSentinelShown: (shown: boolean) => void
+}) {
+  const { material, fallback } = useMemo(() => {
+    const fallback = [solidTexture("#0d2350"), solidTexture("#05060f")]
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        dayA: { value: fallback[0] },
+        dayB: { value: fallback[0] },
+        dayMix: { value: 1 },
+        lights: { value: fallback[1] },
+        sunDir: { value: new THREE.Vector3(1, 0, 0) },
+        night: { value: 1 },
+      },
+      vertexShader: earthVertex,
+      fragmentShader: satelliteFragment,
+    })
+    return { material, fallback }
+  }, [])
+
+  /** image urls in use (dayA, dayB, lights), released when replaced or on unmount */
+  const shown = useMemo(() => ({ month: -1, dayA: "", dayB: "", lights: "", sharp: false, checked: 0 }), [])
+  useEffect(() => {
+    const u = material.uniforms
+    let live = true
+    const setLights = (url: string) =>
+      loadImageTexture(url).then((tex) => {
+        if (!live) return
+        // the sharp image may beat the quick one
+        if (shown.lights === nightImageUrl()) return releaseImageTexture(url)
+        if (shown.lights) releaseImageTexture(shown.lights)
+        shown.lights = url
+        u.lights.value = tex
+      })
+    setLights(nightImageUrl(true)).then(() => setLights(nightImageUrl()))
+    return () => {
+      live = false
+      for (const url of new Set([shown.dayA, shown.dayB, shown.lights])) if (url) releaseImageTexture(url)
+      Object.assign(shown, { month: -1, dayA: "", dayB: "", lights: "", sharp: false })
+      material.dispose()
+      for (const t of fallback) t.dispose()
+    }
+  }, [material, fallback, shown])
+
+  /** shows `url` as the day image: at once the first time, otherwise by fading from the current one */
+  const showDay = useMemo(
+    () => (url: string, tex: THREE.Texture, fade: boolean) => {
+      const u = material.uniforms
+      const drop = [shown.dayA, shown.dayB].filter((x) => x && x !== url && (fade ? x !== shown.dayB : true))
+      if (fade) {
+        u.dayA.value = u.dayB.value
+        shown.dayA = shown.dayB
+        u.dayMix.value = 0
+      } else {
+        u.dayA.value = tex
+        shown.dayA = url
+        u.dayMix.value = 1
+      }
+      u.dayB.value = tex
+      shown.dayB = url
+      for (const x of drop) if (x !== shown.dayA && x !== shown.dayB) releaseImageTexture(x)
+    },
+    [material, shown],
+  )
+
+  const sun = useMemo(() => ({ ll: [0, 0] as LatLon, v: [0, 0, 0] }), [])
+  useFrame((state, delta) => {
+    const u = material.uniforms
+    subsolarPoint(sim.time, sun.ll)
+    latLonToXYZ(sun.ll[0], sun.ll[1], 1, sun.v)
+    ;(u.sunDir.value as THREE.Vector3).set(sun.v[0], sun.v[1], sun.v[2])
+    u.night.value += ((showNight ? 1 : 0) - u.night.value) * 0.1
+    if (u.dayMix.value < 1) {
+      u.dayMix.value = Math.min(1, u.dayMix.value + delta * 1.5)
+      if (u.dayMix.value === 1 && shown.dayA !== shown.dayB) {
+        releaseImageTexture(shown.dayA)
+        u.dayA.value = u.dayB.value
+        shown.dayA = shown.dayB
+      }
+    }
+    // the month of the simulated date, checked a couple of times a second
+    if (state.clock.elapsedTime - shown.checked < 0.5) return
+    shown.checked = state.clock.elapsedTime
+    const month = new Date(sim.time).getUTCMonth()
+    if (month === shown.month) return
+    const first = shown.month < 0
+    shown.month = month
+    const want = (url: string) =>
+      loadImageTexture(url).then((tex) => {
+        if (shown.month !== month) {
+          if (url !== shown.dayA && url !== shown.dayB) releaseImageTexture(url)
+          return false
+        }
+        return tex
+      })
+    if (first) {
+      // a quick 1k image, then the sharp one in place of it
+      want(dayImageUrl(month, true)).then((tex) => {
+        if (tex && !shown.sharp) showDay(dayImageUrl(month, true), tex, false)
+        return want(dayImageUrl(month)).then((sharp) => {
+          if (!sharp) return
+          shown.sharp = true
+          showDay(dayImageUrl(month), sharp, false)
+        })
+      })
+    } else {
+      want(dayImageUrl(month)).then((tex) => tex && showDay(dayImageUrl(month), tex, true))
+    }
+  })
+
+  return (
+    <>
+      <mesh material={material}>
+        <sphereGeometry args={[1, 192, 128]} />
+      </mesh>
+      <SatelliteTiles sim={sim} shading={material.uniforms as Record<"sunDir" | "night" | "lights", THREE.IUniform>} sentinel={sentinel} onSentinelShown={onSentinelShown} />
+    </>
+  )
+}
+
 export function Atmosphere({ theme }: { theme: Theme }) {
   const material = useMemo(
     () =>
@@ -164,7 +321,7 @@ const DETAIL_IN_ALT = 0.12
 const DETAIL_OUT_ALT = 0.3
 
 /** Crisp vector coastlines and borders, swapped to 1:10m detail when zoomed in. */
-export function Borders({ theme }: { theme: Theme }) {
+export function Borders({ theme, mapStyle }: { theme: Theme; mapStyle: MapStyle }) {
   const [detail, setDetail] = useState<BorderDetail>("50m")
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null)
   const material = useMemo(
@@ -192,8 +349,8 @@ export function Borders({ theme }: { theme: Theme }) {
   )
 
   useEffect(() => {
-    ;(material.uniforms.color.value as THREE.Color).set(theme === "dark" ? "#9db8e8" : "#4f6386")
-  }, [material, theme])
+    ;(material.uniforms.color.value as THREE.Color).set(mapStyle === "satellite" ? "#ffffff" : theme === "dark" ? "#9db8e8" : "#4f6386")
+  }, [material, theme, mapStyle])
 
   // the 1:10m lines are parsed and meshed in the worker while the app is idle
   useEffect(() => prefetchBorderLines("10m"), [])
@@ -218,7 +375,9 @@ export function Borders({ theme }: { theme: Theme }) {
 
   useFrame((state) => {
     const alt = state.camera.position.length() - 1
-    material.uniforms.opacity.value = Math.min(0.85, Math.max(0, (0.9 - alt) * 1.1))
+    // fainter over imagery, where coastlines are already visible
+    const max = mapStyle === "satellite" ? 0.4 : 0.85
+    material.uniforms.opacity.value = Math.min(max, Math.max(0, (0.9 - alt) * 1.1))
     if (alt < DETAIL_IN_ALT && detail === "50m") setDetail("10m")
     else if (alt > DETAIL_OUT_ALT && detail === "10m") setDetail("50m")
   })
