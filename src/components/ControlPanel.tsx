@@ -6,7 +6,6 @@ import { BookOpenText, ChevronDown, Dices, Loader2, Moon, Pause, RefreshCw, Rota
 
 import { useTicker } from "@/components/hooks"
 import { Legend } from "@/components/panels/Legend"
-import { formatPeople } from "@/components/panels/format"
 import { SamplingProgress, SimClock } from "@/components/StatusBar"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -18,7 +17,6 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { COLOR_SCHEMES, type ColorScheme, type Theme } from "@/lib/sim/attributes"
 import type { Simulation } from "@/lib/sim/engine"
 import type { CompiledFilter } from "@/lib/sim/filter"
-import { WORLD_POPULATION_M } from "@/lib/sim/population"
 import { cn } from "@/lib/utils"
 
 export const SPEEDS = [
@@ -73,47 +71,32 @@ export function ControlPanel(props: ControlPanelProps) {
         aria-label="Controls"
         className={cn(
           "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex max-h-[60dvh] flex-col p-2 sm:right-auto sm:w-[26rem]",
-          "md:inset-x-auto md:inset-y-0 md:left-0 md:max-h-none md:w-[23rem] md:p-4",
+          "md:inset-x-auto md:inset-y-0 md:left-0 md:max-h-none md:w-[23rem] md:p-4 md:pb-12",
           !open && "max-md:hidden",
         )}
       >
         <div className="pointer-events-auto flex max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card/90 shadow-2xl backdrop-blur-md">
-          <div className="flex items-start gap-2 p-4 pb-2">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-base font-semibold tracking-tight">Sampled Earth</h1>
-              <p className="text-xs text-muted-foreground max-md:hidden">
-                {sim.globalTarget.toLocaleString("en-US")} synthetic people, each standing in for ~
-                {formatPeople(WORLD_POPULATION_M / sim.globalTarget)} real ones
-              </p>
-              <Link
-                href="/methodology"
-                className="mt-1 inline-flex items-center gap-1 rounded-sm text-xs font-medium text-foreground/80 underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-              >
-                <BookOpenText className="size-3.5" aria-hidden /> Methodology & sources
-              </Link>
-              <SamplingProgress sim={sim}>
-                {(pct) => (
-                  <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
-                    <Loader2 className="size-3 animate-spin" aria-hidden /> Sampling humanity… {pct}%
-                  </p>
-                )}
-              </SamplingProgress>
-            </div>
-            <Button variant="ghost" size="icon-sm" onClick={props.onToggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
-              {theme === "dark" ? <Sun /> : <Moon />}
-            </Button>
-            <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={() => onOpenChange(false)} aria-label="Hide controls" aria-expanded aria-controls={panelId}>
-              <ChevronDown />
-            </Button>
-          </div>
-
-          <div className="space-y-2 px-4 pb-3">
-            <div className="flex items-end justify-between gap-2">
-              <SimClock sim={sim} />
+          <h1 className="sr-only">Sampled Earth</h1>
+          <div className="space-y-2 px-4 pt-4 pb-3">
+            <div className="flex items-end gap-1">
+              <SimClock sim={sim} className="mr-auto" />
               <Button variant="ghost" size="xs" onClick={() => sim.jumpTo(Date.now())}>
                 <RotateCcw /> Now
               </Button>
+              <Button variant="ghost" size="icon-sm" onClick={props.onToggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
+                {theme === "dark" ? <Sun /> : <Moon />}
+              </Button>
+              <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={() => onOpenChange(false)} aria-label="Hide controls" aria-expanded aria-controls={panelId}>
+                <ChevronDown />
+              </Button>
             </div>
+            <SamplingProgress sim={sim}>
+              {(pct) => (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+                  <Loader2 className="size-3 animate-spin" aria-hidden /> Sampling humanity… {pct}%
+                </p>
+              )}
+            </SamplingProgress>
             <ToggleGroup
               variant="outline"
               size="sm"
@@ -176,6 +159,14 @@ export function ControlPanel(props: ControlPanelProps) {
           </Tabs>
         </div>
       </aside>
+
+      {/* Bottom-left corner of the map: under the panel on desktop, above the collapsed bar on phones */}
+      <Link
+        href="/methodology"
+        className="absolute bottom-16 left-2 z-20 inline-flex items-center gap-1.5 rounded-full border border-border bg-background/70 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none md:bottom-4 md:left-4"
+      >
+        <BookOpenText className="size-3.5" aria-hidden /> Methodology & Sources
+      </Link>
 
       {/* Collapsed bottom bar on phones */}
       {!open && (
