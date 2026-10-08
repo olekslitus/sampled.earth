@@ -16,6 +16,7 @@ import { DisasterLayer, type ExtraPick } from "./DisasterLayer"
 import { Atmosphere, Borders, Earth, SatelliteEarth } from "./EarthLayers"
 import { CityLabels, HoverLabel, SelectionMarker } from "./Labels"
 import { People, Picker } from "./PeopleLayer"
+import { PlacesLayer, type PlaceKey, type PlacePick, type PlacesMap } from "./PlacesLayer"
 import type { MapStyle } from "./satellite"
 import { UnrestLayer } from "./UnrestLayer"
 import { VitalLayer, type VitalStats } from "./VitalLayer"
@@ -79,6 +80,10 @@ export interface GlobeProps {
   /** galaxies and the cosmic web load once you head that way */
   deepSpace: boolean
   selectedSpaceKey: string | null
+  /** the statistics map (null when off) */
+  places: PlacesMap | null
+  onPlaceHover: (hit: PlaceKey | null, clientX: number, clientY: number) => void
+  onPlaceSelect: (hit: PlaceKey) => void
 }
 
 /** Reading shader logs forces a synchronous wait for every program link on first use */
@@ -91,6 +96,7 @@ function Globe(props: GlobeProps) {
   /** per-slot base point size (0 = not drawn); shared by renderer and picker */
   const sizesRef = useRef<Float32Array>(new Float32Array(0))
   const extraPickRef = useRef<ExtraPick | null>(null)
+  const placesRef = useRef<PlacePick | null>(null)
   const overlaysRef = useRef<THREE.Group>(null)
   const trackKey = props.selectedSpaceKey?.startsWith("track:") ? props.selectedSpaceKey.slice(6) : null
   return (
@@ -131,9 +137,11 @@ function Globe(props: GlobeProps) {
           showNight={props.showNight}
           mapStyle={props.mapStyle}
           theme={props.theme}
+          faint={!!props.places?.countryRGBA || !!props.places?.regionRGBA}
         />
       )}
       <group ref={overlaysRef}>
+      {props.places && <PlacesLayer map={props.places} pickRef={placesRef} onHover={props.onPlaceHover} onSelect={props.onPlaceSelect} />}
       <Borders theme={props.theme} mapStyle={props.mapStyle} />
       {props.showUnrest && <UnrestLayer onPick={props.onPickHotspot} />}
       <People
@@ -147,6 +155,7 @@ function Globe(props: GlobeProps) {
         filter={props.filter}
         filterMode={props.filterMode}
         sizesRef={sizesRef}
+        placesRef={placesRef}
       />
       {props.showVital && <VitalLayer sim={props.sim} speedRef={props.speedRef} theme={props.theme} statsRef={props.vitalStatsRef} />}
       {props.animals.length > 0 && <AnimalLayer sim={props.sim} species={props.animals} theme={props.theme} />}
@@ -164,7 +173,7 @@ function Globe(props: GlobeProps) {
       {props.selectedId != null && <SelectionMarker sim={props.sim} id={props.selectedId} />}
       {props.hoveredId != null && props.hoveredId !== props.selectedId && <HoverLabel sim={props.sim} id={props.hoveredId} />}
       </group>
-      <Picker sim={props.sim} sizesRef={sizesRef} extraRef={extraPickRef} onSelect={props.onSelect} onHover={props.onHover} />
+      <Picker sim={props.sim} sizesRef={sizesRef} extraRef={extraPickRef} placesRef={placesRef} onSelect={props.onSelect} onHover={props.onHover} />
       <CameraRig
         sim={props.sim}
         selectedId={props.selectedId}

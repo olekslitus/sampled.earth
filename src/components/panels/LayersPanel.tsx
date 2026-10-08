@@ -74,6 +74,8 @@ interface LayersPanelProps {
   onPickDisaster: (d: Disaster) => void
   /** the Space section (spacecraft, findings) */
   space: ReactNode
+  /** the statistics map section (countries, regions, cities) */
+  places: ReactNode
 }
 
 export function LayersPanel(props: LayersPanelProps) {
@@ -114,6 +116,9 @@ export function LayersPanel(props: LayersPanelProps) {
           </>
         )}
       </section>
+
+      {/* Countries, regions & cities ----------------------------------------------- */}
+      {props.places}
 
       {/* Weather ------------------------------------------------------------------- */}
       <section className="space-y-2">

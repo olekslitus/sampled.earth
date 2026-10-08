@@ -244,6 +244,25 @@ export default function MethodologyPage() {
               estimates. Wild ranges are hand-drawn.
             </li>
             <li>
+              <b>Countries, regions & cities map</b>: each statistic names its source, and where several cover the same thing you
+              choose which colours the map. Countries: the World Bank figures above plus GDP and income per person, density,
+              inequality, poverty, electricity, water, child mortality, higher education and CO₂ (WDI, CC BY 4.0). Regions:{" "}
+              <a className="underline underline-offset-2" href="https://globaldatalab.org/shdi/">
+                Global Data Lab Subnational Human Development Database
+              </a>{" "}
+              (Smits &amp; Permanyer 2019): HDI, life expectancy, schooling, income and population for about 1,800 regions, with the GDL
+              region outlines (v6.4, simplified), free for non-commercial use. Cities: the{" "}
+              <a className="underline underline-offset-2" href="https://human-settlement.emergency.copernicus.eu/ghs_ucdb_2024.php">
+                GHSL Urban Centre Database R2024A
+              </a>{" "}
+              (European Commission, JRC; © European Union, CC BY 4.0): 11,422 urban centres mapped from satellite data, with population
+              (GHS-POP), area, building height, greenness, climate (ERA5), heat stress, hospital access (healthsites.io), mobile speed
+              (Ookla), age shares (WorldPop), GDP per person (Kummu et al. gridded GDP, divided by GHS-POP 2020) and HDI, life
+              expectancy and schooling taken from Global Data Lab regions. Colours split the places into six groups of about equal size
+              (quantiles), so they show rank rather than distance between values. “Matching your filter” counts this sample’s people,
+              so small countries are left blank until at least 20 of their people are sampled.
+            </li>
+            <li>
               <b>Borders</b>: Natural Earth via the <code className="rounded bg-muted px-1 py-0.5 text-sm">world-atlas</code>{" "}
               package (1:50m, and 1:10m when zoomed in).
             </li>

@@ -41,6 +41,12 @@ bun scripts/fetch-space.ts                            # catalogues and textures 
 bun --env-file=.env.local scripts/update-space.ts     # live spacecraft and exoplanets to Blob
 ```
 
+The countries, regions & cities map uses extra World Bank indicators, the Global Data Lab Subnational HDI (about 1,800 regions; free for non-commercial use) and the GHSL Urban Centre Database (11,400 cities, CC BY 4.0), stored in `public/places/`. The Subnational HDI CSV needs a free Global Data Lab login, so download "Subnational HDI Data v10.2.csv" from https://globaldatalab.org/shdi/download_files/ first; everything else is downloaded by the script:
+
+```bash
+bun scripts/fetch-places.ts ~/Downloads/"Subnational HDI Data v10.2.csv"
+```
+
 Natural disasters load live in the browser from USGS, GDACS and NASA EONET. Every source and assumption is listed on the [methodology page](https://sampled.earth/methodology) (`src/app/methodology/page.tsx`).
 
 ## Stack

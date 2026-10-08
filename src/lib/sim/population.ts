@@ -200,6 +200,16 @@ function inside(geo: CountryGeo, lat: number, lon: number) {
   return ringsContain(geo.rings, lat, lon)
 }
 
+/** Where to look at a country from: the middle of its bounding box and how wide it is (degrees) */
+export function countryView(c: Country): { lat: number; lon: number; span: number } {
+  const [[w, south], [e, north]] = GEO.get(c.name)!.bounds
+  let width = e - w
+  if (width < 0) width += 360
+  let lon = w + width / 2
+  if (lon > 180) lon -= 360
+  return { lat: (south + north) / 2, lon, span: Math.max(width * Math.cos((((south + north) / 2) * Math.PI) / 180), north - south) }
+}
+
 export function insideCountry(c: Country, lat: number, lon: number) {
   return inside(GEO.get(c.name)!, lat, lon)
 }

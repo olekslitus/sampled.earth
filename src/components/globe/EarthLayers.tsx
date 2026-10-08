@@ -298,7 +298,7 @@ export function Atmosphere({ theme }: { theme: Theme }) {
   )
 }
 
-const lineVertex = /* glsl */ `
+export const lineVertex = /* glsl */ `
   varying float vFacing;
   void main() {
     vec3 toCam = normalize(cameraPosition - position);
@@ -306,7 +306,7 @@ const lineVertex = /* glsl */ `
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `
-const lineFragment = /* glsl */ `
+export const lineFragment = /* glsl */ `
   uniform vec3 color;
   uniform float opacity;
   varying float vFacing;

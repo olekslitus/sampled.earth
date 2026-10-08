@@ -12,6 +12,7 @@ import type { Simulation } from "@/lib/sim/engine"
 import type { CompiledFilter } from "@/lib/sim/filter"
 import { PERSON_RADIUS } from "@/lib/sim/sphere"
 import type { ExtraPick } from "./DisasterLayer"
+import type { PlacePick } from "./PlacesLayer"
 import type { MapStyle } from "./satellite"
 import { hexToRgb, pointSizeFor } from "./util"
 
@@ -37,6 +38,7 @@ const pointsVertex = /* glsl */ `
 `
 const pointsFragment = /* glsl */ `
   uniform float uRing;
+  uniform float uFade;
   varying vec3 vColor;
   varying float vAlpha;
   void main() {
@@ -45,7 +47,7 @@ const pointsFragment = /* glsl */ `
     if (d > 0.5) discard;
     // a dark rim keeps dots readable over busy satellite imagery
     vec3 color = mix(vColor, vec3(0.02, 0.03, 0.06), uRing * smoothstep(0.24, 0.36, d));
-    gl_FragColor = vec4(color, vAlpha * smoothstep(0.5, 0.32, d));
+    gl_FragColor = vec4(color, vAlpha * smoothstep(0.5, 0.32, d) * (1.0 - 0.8 * uFade));
   }
 `
 
@@ -63,6 +65,8 @@ export interface PeopleProps {
   filterMode: "grey" | "hide"
   /** per-slot base point size (0 = not drawn); shared with the picker */
   sizesRef: RefObject<Float32Array>
+  /** the statistics map, when on: people fade back while it colours the areas */
+  placesRef: RefObject<PlacePick | null>
 }
 
 /** Inclusive dirty index range; empty while max < min */
@@ -86,7 +90,7 @@ class Range {
   }
 }
 
-export function People({ sim, scheme, hidden, selectedId, hoveredId, sizesRef, theme, mapStyle, filter, filterMode }: PeopleProps) {
+export function People({ sim, scheme, hidden, selectedId, hoveredId, sizesRef, placesRef, theme, mapStyle, filter, filterMode }: PeopleProps) {
   const dpr = useThree((s) => s.viewport.dpr)
   const cap = sim.capacity
   const { geometry, colors, sizes, renderSizes } = useMemo(() => {
@@ -110,7 +114,7 @@ export function People({ sim, scheme, hidden, selectedId, hoveredId, sizesRef, t
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
-        uniforms: { uSize: { value: 2 }, uRing: { value: 0 } },
+        uniforms: { uSize: { value: 2 }, uRing: { value: 0 }, uFade: { value: 0 } },
         vertexShader: pointsVertex,
         fragmentShader: pointsFragment,
         transparent: true,
@@ -227,6 +231,7 @@ export function People({ sim, scheme, hidden, selectedId, hoveredId, sizesRef, t
     }
     geometry.setDrawRange(0, end)
     material.uniforms.uSize.value = pointSizeFor(state.camera.position.length() - 1) * dpr
+    material.uniforms.uFade.value = placesRef.current?.peopleFade ?? 0
   })
 
   return <points geometry={geometry} material={material} renderOrder={2} frustumCulled={false} />
@@ -284,12 +289,14 @@ class ScreenProjector {
 export const FAR_FROM_EARTH = 40
 
 export function Picker({
-  sim, sizesRef, extraRef, onSelect, onHover,
+  sim, sizesRef, extraRef, placesRef, onSelect, onHover,
 }: {
   sim: Simulation
   sizesRef: RefObject<Float32Array>
   /** markers from other layers, which win over people when both are under the cursor */
   extraRef: RefObject<ExtraPick | null>
+  /** cities, then people (unless faded), then countries or regions on the statistics map */
+  placesRef: RefObject<PlacePick | null>
   onSelect: (id: number | null) => void
   onHover: (id: number | null) => void
 }) {
@@ -354,11 +361,25 @@ export function Picker({
     }
     /** out in space the globe is a dot; space labels and markers take the clicks */
     const tooFar = () => camera.position.length() > FAR_FROM_EARTH
+    /** the person under the cursor, unless the statistics map has faded people back */
+    const pickPerson = (clientX: number, clientY: number) => ((placesRef.current?.peopleFade ?? 0) > 0.5 ? null : pick(clientX, clientY))
+    /** a city, or (when no person is under the cursor) a country or region */
+    const pickPlace = (clientX: number, clientY: number, person: number | null) => {
+      const places = placesRef.current
+      if (!places) return null
+      const hit = places.pick(clientX, clientY)
+      return hit && (hit.kind === "city" || person == null) ? hit : null
+    }
     const onUp = (e: PointerEvent) => {
       if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5 && !tooFar()) {
         const hit = pickExtra(e.clientX, e.clientY)
         if (hit != null) extraRef.current!.onSelect(hit)
-        else handlers.current.onSelect(pick(e.clientX, e.clientY))
+        else {
+          const person = pickPerson(e.clientX, e.clientY)
+          const place = pickPlace(e.clientX, e.clientY, person)
+          if (place) placesRef.current!.select(place)
+          else handlers.current.onSelect(person)
+        }
       }
       down = null
     }
@@ -371,8 +392,11 @@ export function Picker({
           extraHovered = hit
           extraRef.current?.onHover(hit)
         }
-        const id = hit != null ? null : pick(e.clientX, e.clientY)
-        el.style.cursor = hit != null || id != null ? "pointer" : "grab"
+        let id = hit != null ? null : pickPerson(e.clientX, e.clientY)
+        const place = hit != null ? null : pickPlace(e.clientX, e.clientY, id)
+        if (place?.kind === "city") id = null
+        placesRef.current?.hover(place, e.clientX, e.clientY)
+        el.style.cursor = hit != null || id != null || place != null ? "pointer" : "grab"
         if (id !== hovered) {
           hovered = id
           handlers.current.onHover(id)
@@ -385,6 +409,7 @@ export function Picker({
       handlers.current.onHover(null)
       extraHovered = null
       extraRef.current?.onHover(null)
+      placesRef.current?.hover(null, 0, 0)
     }
     el.addEventListener("pointerdown", onDown)
     el.addEventListener("pointerup", onUp)
@@ -397,7 +422,7 @@ export function Picker({
       el.removeEventListener("pointermove", onMove)
       el.removeEventListener("pointerleave", onLeave)
     }
-  }, [camera, gl, sim, sizesRef, extraRef])
+  }, [camera, gl, sim, sizesRef, extraRef, placesRef])
 
   return null
 }

@@ -80,7 +80,7 @@ function cloudLook(mapStyle: MapStyle, theme: Theme): [string, number] {
  * above the surface, beneath the people. Fades as you zoom in so the ground shows through.
  */
 export function WeatherLayer({
-  sim, index, showClouds, showPrecip, showNight, mapStyle, theme,
+  sim, index, showClouds, showPrecip, showNight, mapStyle, theme, faint = false,
 }: {
   sim: Simulation
   index: WeatherIndex
@@ -89,6 +89,8 @@ export function WeatherLayer({
   showNight: boolean
   mapStyle: MapStyle
   theme: Theme
+  /** thin the clouds right down, so the statistics map underneath can be read */
+  faint?: boolean
 }) {
   const { material, empty } = useMemo(() => {
     const empty = new THREE.DataTexture(new Uint8Array(4), 1, 1)
@@ -169,7 +171,7 @@ export function WeatherLayer({
     latLonToXYZ(sun.ll[0], sun.ll[1], 1, sun.v)
     ;(u.sunDir.value as THREE.Vector3).set(sun.v[0], sun.v[1], sun.v[2])
     u.night.value += ((showNight ? 1 : 0) - u.night.value) * 0.1
-    u.showClouds.value += ((showClouds ? 1 : 0) - u.showClouds.value) * 0.12
+    u.showClouds.value += ((showClouds ? (faint ? 0.25 : 1) : 0) - u.showClouds.value) * 0.12
     u.showPrecip.value += ((showPrecip ? 1 : 0) - u.showPrecip.value) * 0.12
     u.time.value = state.clock.elapsedTime
     // thinner as you zoom in, so the ground shows through

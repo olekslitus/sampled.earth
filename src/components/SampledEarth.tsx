@@ -28,6 +28,12 @@ import { SpaceLabels } from "@/components/space/SpaceLabels"
 import { SpacePanel } from "@/components/space/SpacePanel"
 import { SpaceView, type Level } from "@/components/space/view"
 import { LY } from "@/lib/space/units"
+import type { PlaceKey } from "@/components/globe/PlacesLayer"
+import { placeView } from "@/components/places/fly"
+import { PlaceCard } from "@/components/places/PlaceCard"
+import { PlacesPanel } from "@/components/places/PlacesPanel"
+import { PlaceTooltip, setPlaceHover } from "@/components/places/PlaceTooltip"
+import { DEFAULT_PLACES, useFilterShare, usePlaceData, usePlacesView, type PlacesSettings } from "@/components/places/usePlaces"
 
 /** Read a saved value; storage can be unavailable (private mode, blocked site data) */
 function load<T>(key: string, fallback: T): T {
@@ -180,6 +186,14 @@ export default function SampledEarth() {
     [showDisasters, disasterFeed, hiddenKinds],
   )
 
+  // countries, regions & cities ------------------------------------------------------
+  const [places, setPlaces] = useState<PlacesSettings>(() => load("places", DEFAULT_PLACES))
+  useEffect(() => save("places", places), [places])
+  const [place, setPlace] = useState<PlaceKey | null>(null)
+  const filterShare = useFilterShare(sim, filter, places.on && places.metric === "filter")
+  const placeData = usePlaceData(places.on || place != null, filterShare)
+  const placesView = usePlacesView(places, placeData, theme, place)
+
   // selection & view -----------------------------------------------------------------
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [follow, setFollow] = useState(false)
@@ -232,6 +246,7 @@ export default function SampledEarth() {
     if (id != null) {
       setHotspot(null)
       setDisaster(null)
+      setPlace(null)
       setPanelOpen(false)
       setHintDone(true)
     } else {
@@ -256,6 +271,7 @@ export default function SampledEarth() {
       setSelectedId(null)
       setFollow(false)
       setDisaster(null)
+      setPlace(null)
       setHotspot(h)
       setPanelOpen(false)
       flyTo(h.lat, h.lon, Math.max(0.05, Math.min(0.9, h.radius * 0.14)))
@@ -268,6 +284,7 @@ export default function SampledEarth() {
       setSelectedId(null)
       setFollow(false)
       setHotspot(null)
+      setPlace(null)
       setDisaster(d)
       setPanelOpen(false)
       const km = Math.max(d.impactKm, 60)
@@ -275,6 +292,23 @@ export default function SampledEarth() {
     },
     [flyTo],
   )
+
+  /** open a place's card; `fly` also takes the camera there (picked from a list rather than the globe) */
+  const pickPlace = useCallback(
+    (key: PlaceKey, fly = false) => {
+      setSelectedId(null)
+      setFollow(false)
+      setDisaster(null)
+      setHotspot(null)
+      setSpaceKey(null)
+      setPlace(key)
+      setPanelOpen(false)
+      setHintDone(true)
+      if (fly) placeView(key, placeData).then((v) => v && flyTo(v.lat, v.lon, v.alt))
+    },
+    [placeData, flyTo],
+  )
+  const selectPlaceOnGlobe = useCallback((key: PlaceKey) => pickPlace(key), [pickPlace])
 
   // A spawned person who was despawned (the zoom region moved on) can no longer be shown.
   useEffect(() => {
@@ -292,6 +326,7 @@ export default function SampledEarth() {
       setFollow(false)
       setDisaster(null)
       setHotspot(null)
+      setPlace(null)
       setPanelOpen(false)
       setSpaceWanted(true)
       if (item.frame > 0.3 * LY) setDeepSpace(true)
@@ -315,6 +350,7 @@ export default function SampledEarth() {
     if (selectedId != null) onSelect(null)
     else if (disaster) setDisaster(null)
     else if (hotspot) setHotspot(null)
+    else if (place) setPlace(null)
     else if (spaceKey) setSpaceKey(null)
     else return
     e.preventDefault()
@@ -347,11 +383,12 @@ export default function SampledEarth() {
   }
 
   const filterActive = !isEmptySpec(spec)
-  const layersActive = (showVital ? 1 : 0) + (showUnrest ? 1 : 0) + (animals.length ? 1 : 0) + (showDisasters ? 1 : 0)
+  const layersActive = (places.on ? 1 : 0) + (showVital ? 1 : 0) + (showUnrest ? 1 : 0) + (animals.length ? 1 : 0) + (showDisasters ? 1 : 0)
   const personShown = selectedId != null
   const disasterShown = !personShown && disaster != null && disasterFeed != null
   const hotspotShown = !personShown && !disasterShown && hotspot != null
-  const spaceShown = !personShown && !disasterShown && !hotspotShown && spaceItem != null
+  const placeShown = !personShown && !disasterShown && !hotspotShown && place != null
+  const spaceShown = !personShown && !disasterShown && !hotspotShown && !placeShown && spaceItem != null
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-background text-foreground">
@@ -391,10 +428,14 @@ export default function SampledEarth() {
           spaceLive={spaceLive}
           deepSpace={deepSpace}
           selectedSpaceKey={spaceKey}
+          places={placesView?.map ?? null}
+          onPlaceHover={setPlaceHover}
+          onPlaceSelect={selectPlaceOnGlobe}
         />
       </div>
+      {placesView && <PlaceTooltip view={placesView} data={placeData} />}
       <SpaceLabels view={space} items={spaceItems} selectedKey={spaceKey} onPick={pickSpace} />
-      <ScaleLadder view={space} onLevel={goToLevel} cardOpen={personShown || disasterShown || hotspotShown || spaceShown} />
+      <ScaleLadder view={space} onLevel={goToLevel} cardOpen={personShown || disasterShown || hotspotShown || placeShown || spaceShown} />
 
       <ControlPanel
         sim={sim}
@@ -497,6 +538,16 @@ export default function SampledEarth() {
             onHiddenKinds={setHiddenKinds}
             onPickDisaster={pickDisaster}
             space={<SpacePanel items={spaceItems} live={spaceLive} onPick={pickSpace} />}
+            places={
+              <PlacesPanel
+                settings={places}
+                onSettings={setPlaces}
+                view={placesView}
+                data={placeData}
+                filterActive={filterActive}
+                onPick={(key) => pickPlace(key, true)}
+              />
+            }
           />
         }
         settings={
@@ -531,9 +582,26 @@ export default function SampledEarth() {
       )}
       {disasterShown && <DisasterCard d={disaster} now={disasterFeed.fetchedAt} onClose={() => setDisaster(null)} />}
       {hotspotShown && <HotspotCard hotspot={hotspot} onClose={() => setHotspot(null)} />}
+      {placeShown && (
+        <PlaceCard
+          place={place}
+          data={placeData}
+          view={placesView}
+          sim={sim}
+          theme={theme}
+          onClose={() => setPlace(null)}
+          onPick={(key) => pickPlace(key, true)}
+          onMeet={showPerson}
+          onFilterCountry={(name) => {
+            setSpec({ ...spec, countries: [name] })
+            setFilterSource("filter")
+            setTab("filter")
+          }}
+        />
+      )}
       {spaceShown && <SpaceCard item={spaceItem} view={space} onClose={() => setSpaceKey(null)} onFly={() => pickSpace(spaceItem)} />}
 
-      {!hintDone && !personShown && !disasterShown && !hotspotShown && !spaceShown && <TapHint />}
+      {!hintDone && !personShown && !disasterShown && !hotspotShown && !placeShown && !spaceShown && <TapHint />}
       <StatusBar sim={sim} altitudeRef={altitudeRef} showVital={showVital} vitalRef={vitalRef} hasSelection={personShown} />
       {mapStyle === "satellite" && sentinelShown && (
         <a
