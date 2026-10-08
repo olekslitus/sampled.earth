@@ -45,6 +45,7 @@ The countries, regions & cities map uses extra World Bank indicators, the Global
 
 ```bash
 bun scripts/fetch-places.ts ~/Downloads/"Subnational HDI Data v10.2.csv"
+bun scripts/build-centres.ts   # the urban centres people live in (src/lib/sim/data/centres.json)
 ```
 
 Natural disasters load live in the browser from USGS, GDACS and NASA EONET. Every source and assumption is listed on the [methodology page](https://sampled.earth/methodology) (`src/app/methodology/page.tsx`).

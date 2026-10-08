@@ -63,7 +63,7 @@ export function PersonPanel({ theme, sim, id, incomePercentile, follow, onFollow
           </p>
           <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
             <MapPin className="size-3" />
-            {p.urban ? p.city.name : `Rural area near ${p.city.name}`}, {c.label}
+            {p.inCity ? p.city.name : p.urban ? `Town near ${p.city.name}` : `Rural area near ${p.city.name}`}, {c.label}
           </p>
         </div>
         <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
@@ -113,7 +113,7 @@ export function PersonPanel({ theme, sim, id, incomePercentile, follow, onFollow
               {p.religion !== "Unaffiliated" && <span className="text-muted-foreground"> · {p.devout ? "practising" : "non-practising"}</span>}
             </Row>
             <Row icon={<Globe2 />} label="Lives in">
-              {p.urban ? "City" : "Countryside"} · {REGIONS[c.region]}
+              {p.inCity ? "City" : p.urban ? "Town" : "Countryside"} · {REGIONS[c.region]}
             </Row>
           </Section>
 

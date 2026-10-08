@@ -2,7 +2,10 @@
  * National statistics used to sample synthetic people. The hand-entered table below is
  * overlaid with World Bank WDI values (src/lib/sim/data/wdi.json, refreshed by
  * `bun scripts/fetch-data.ts`) wherever those exist; see /methodology for every source.
+ * People live in and around the GHSL urban centres in src/lib/sim/data/centres.json
+ * (`bun scripts/build-centres.ts`).
  */
+import centres from "./data/centres.json"
 import wdi from "./data/wdi.json"
 
 export const REGIONS = {
@@ -40,11 +43,23 @@ export type NamePool =
   | "malayIndo" | "filipino" | "mongolian" | "melanesian" | "hebrew"
   | "westAfrica" | "sahel" | "centralAfrica" | "eastAfrica" | "horn" | "southernAfrica" | "malagasy"
 
+/** A well-known city, labelled on the globe */
 export interface City {
   name: string
   lat: number
   lon: number
   weight: number
+}
+
+/** A built-up urban centre (GHSL Urban Centre Database): where people live */
+export interface Centre {
+  name: string
+  lat: number
+  lon: number
+  /** millions of residents */
+  pop: number
+  /** spread of homes around the centre (degrees, 1σ) */
+  sigma: number
 }
 
 export interface Country {
@@ -90,7 +105,10 @@ export interface Country {
   births: number
   deaths: number
   languages: { name: string; share: number }[]
+  /** well-known cities, largest first */
   cities: City[]
+  /** urban centres, largest first */
+  centres: Centre[]
   namePool: NamePool
 }
 
@@ -116,7 +134,7 @@ function c(
     name, label: LABELS[name] ?? name, iso2, region, population, medianIncome, gini, religion, urban, medianAge, education,
     agriculture, industry, migrants, internet, lifeExpectancy, fertility, namePool,
     ageBands: { male: [], female: [] }, femaleShare: 50, participation: { male: 75, female: 50 }, unemployment: 5,
-    outOfSchool: { primary: 5, lowerSecondary: 10 }, births: 0, deaths: 0,
+    outOfSchool: { primary: 5, lowerSecondary: 10 }, births: 0, deaths: 0, centres: [],
     languages: languages.split(",").map((l) => {
       const [n, s] = l.split(":")
       return { name: n, share: Number(s) }
@@ -837,6 +855,28 @@ for (const c of COUNTRIES) {
   if (male.every((x) => x !== undefined) && female.every((x) => x !== undefined)) {
     c.ageBands = { male: male as number[], female: female as number[] }
     c.medianAge = medianOfBands(c.ageBands.male, c.ageBands.female, c.femaleShare)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Urban centres
+
+/** Homes fill a centre's built-up area: a disc of that area has a 1σ spread of half its radius */
+function centreSigma(areaKm2: number) {
+  return Math.max(0.012, Math.sqrt(areaKm2 / Math.PI) / 2 / 111)
+}
+
+const CENTRES = centres.countries as unknown as Record<string, [name: string, lat: number, lon: number, popK: number, areaKm2: number][]>
+for (const c of COUNTRIES) {
+  const list = CENTRES[c.iso2]
+  if (list?.length) {
+    c.centres = list.map(([name, lat, lon, popK, area]) => ({ name, lat, lon, pop: popK / 1000, sigma: centreSigma(area) }))
+  } else {
+    // no GHSL centres: share the urban population among the well-known cities
+    const total = c.cities.reduce((s, x) => s + x.weight, 0)
+    c.centres = c.cities.map((x) => ({
+      name: x.name, lat: x.lat, lon: x.lon, pop: (c.population * c.urban * x.weight) / 100 / total, sigma: 0.04 + 0.06 * x.weight,
+    }))
   }
 }
 

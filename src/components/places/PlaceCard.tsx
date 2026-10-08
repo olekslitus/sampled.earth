@@ -407,20 +407,26 @@ function CityBody({ city, data, view, sim, onClose, onPick, onMeet, titleId }: P
       }),
     [city, data.cities],
   )
-  /** the nearest sampled person within ~60 km */
-  const nearest = () => {
+  /** a random sampled resident of this centre, or else the nearest sampled person within ~60 km */
+  const resident = () => {
+    // the simulation's centres drop the bracketed twin city: "Rotterdam [The Hague]" → "Rotterdam"
+    const name = city.name.replace(/\s*\[.*\]$/, "")
+    const cos = Math.cos((city.lat * Math.PI) / 180)
+    const residents: number[] = []
     let best = -1
     let bestD = 0.55 ** 2
-    const cos = Math.cos((city.lat * Math.PI) / 180)
     for (let i = 0; i < sim.globalCount; i++) {
-      const [lat, lon] = sim.people[i]!.home
-      const d = (lat - city.lat) ** 2 + ((lon - city.lon) * cos) ** 2
-      if (d < bestD) {
-        bestD = d
+      const p = sim.people[i]!
+      const d = (p.city.lat - city.lat) ** 2 + ((p.city.lon - city.lon) * cos) ** 2
+      if (p.inCity && p.city.name === name && p.country.iso2 === city.iso2 && d < 0.1) residents.push(i)
+      const [lat, lon] = p.home
+      const h = (lat - city.lat) ** 2 + ((lon - city.lon) * cos) ** 2
+      if (h < bestD) {
+        bestD = h
         best = i
       }
     }
-    return best
+    return residents.length ? residents[Math.floor(Math.random() * residents.length)]! : best
   }
   const climate = city.climate != null ? KOPPEN[city.climate] : null
   return (
@@ -486,7 +492,7 @@ function CityBody({ city, data, view, sim, onClose, onPick, onMeet, titleId }: P
           variant="outline"
           size="sm"
           onClick={() => {
-            const i = nearest()
+            const i = resident()
             if (i >= 0) onMeet(sim.people[i]!.id)
           }}
         >

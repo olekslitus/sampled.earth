@@ -117,9 +117,17 @@ export default function MethodologyPage() {
               language.
             </Step>
             <Step title="Home">
-              People are urban or rural according to the national urban share. Urban residents live in, or in towns around, the
-              country’s largest cities, which are weighted by size. Rural homes are scattered around those cities but stay inside
-              the national border (Natural Earth boundaries).
+              Homes follow the GHSL Urban Centre Database (European Commission, JRC; CC BY 4.0): about 6,000 built-up urban
+              centres of 100,000 people or more, plus each country’s five largest, mapped from satellite data. The share of a
+              country’s people living in these centres is their combined 2025 population (at most 90%). Those people live
+              inside a centre, chosen by its population and spread over its built-up area. Everyone else lives in a town or
+              the countryside around a centre. These centres are chosen by the square root of their population, so small
+              centres get a fair share of the surrounding land. Homes outside the centres stay inside the national border
+              (Natural Earth boundaries).
+              <p className="mt-2">
+                The national urban share (World Bank) still decides who counts as urban. City dwellers count as urban first,
+                and the rest of that share lives in towns. The UN’s definitions of urban are wider than GHSL’s centres.
+              </p>
               <p className="mt-2">Workplaces, schools and other places a person visits are also kept on land.</p>
               <p className="mt-2">
                 On the zoomed-out globe, distances travelled from home are exaggerated (6× by default, adjustable in Settings) so

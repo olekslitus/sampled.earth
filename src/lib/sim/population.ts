@@ -6,7 +6,7 @@ import worldTopo from "world-atlas/countries-50m.json"
 
 import {
   COUNTRIES, COUNTRY_BY_NAME, DIASPORA_ORIGINS, EDUCATION_LEVELS, RELIGIONS,
-  type City, type Country, type Religion,
+  type Centre, type Country, type Religion,
 } from "./countries"
 import { NAME_POOLS, displayName } from "./names"
 import { assignPolitics, type PoliticalTraits, type Politics } from "./politics"
@@ -27,7 +27,10 @@ export interface Person {
   gender: "Male" | "Female"
   age: number
   country: Country
-  city: City
+  /** the urban centre they live in, or the one they live near */
+  city: Centre
+  /** lives inside the centre's built-up area (else in a town or the countryside around it) */
+  inCity: boolean
   urban: boolean
   immigrant: boolean
   origin: Country
@@ -214,39 +217,87 @@ export function insideCountry(c: Country, lat: number, lon: number) {
   return inside(GEO.get(c.name)!, lat, lon)
 }
 
-/** Spread (degrees, 1σ) of homes around a city centre for urban residents */
-export function urbanSigma(city: City) {
-  return 0.04 + 0.06 * city.weight
+/**
+ * Where a country's people live. Everyone in an urban centre is placed inside it, in
+ * proportion to its residents; everyone else lives in a town or the countryside around a
+ * centre, chosen by the square root of its residents so small centres get a fair share of
+ * the surrounding land. The urban share (UN definitions, wider than GHSL centres) is kept:
+ * city dwellers count as urban first, and the rest of the urban share lives in towns.
+ */
+export interface CentreModel {
+  /** share of people living inside an urban centre */
+  inside: number
+  /** chance that someone inside a centre / outside every centre counts as urban */
+  urbanInside: number
+  urbanOutside: number
+  /** cumulative weights for choosing the centre someone lives in / lives near */
+  byPop: Float64Array
+  bySpread: Float64Array
 }
 
-/**
- * Share of urban residents living in smaller towns scattered around each listed city
- * (placed like rural homes) rather than in the city itself.
- */
-export const TOWN_SHARE = 0.45
+const MODELS = new Map<Country, CentreModel>()
+export function centreModel(c: Country): CentreModel {
+  let m = MODELS.get(c)
+  if (m) return m
+  const cumulative = (w: (x: Centre) => number) => {
+    let t = 0
+    return Float64Array.from(c.centres, (x) => (t += w(x)))
+  }
+  const byPop = cumulative((x) => x.pop)
+  // GHSL counts people a little differently from the UN, so leave some room outside the centres
+  const inside = Math.min(0.9, byPop[byPop.length - 1] / c.population)
+  const u = c.urban / 100
+  m = {
+    inside,
+    urbanInside: Math.min(1, u / inside),
+    urbanOutside: Math.max(0, (u - inside) / (1 - inside)),
+    byPop,
+    bySpread: cumulative((x) => Math.sqrt(x.pop)),
+  }
+  MODELS.set(c, m)
+  return m
+}
 
-/** Spread (degrees, 1σ) of rural homes around their nearest city */
+/** Index into a cumulative weight array, chosen in proportion to the weights */
+export function pickCumulative(rng: Rng, cumulative: Float64Array) {
+  const x = rng() * cumulative[cumulative.length - 1]
+  let lo = 0
+  let hi = cumulative.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (cumulative[mid] < x) lo = mid + 1
+    else hi = mid
+  }
+  return lo
+}
+
+/** Spread (degrees, 1σ) of rural homes around a centre */
 export function ruralSigma(c: Country) {
   return GEO.get(c.name)!.spread
 }
 
-/** Urban homes must be on land */
-export function urbanHomeOk(c: Country, _city: City, home: LatLon) {
+/** Homes in towns and the countryside lie beyond the centre's built-up area (about 2σ) */
+export function outsideDist(city: Centre) {
+  return Math.max(RURAL_MIN_DIST, 2 * city.sigma)
+}
+
+/** City homes must be on land */
+export function cityHomeOk(c: Country, home: LatLon) {
   return insideCountry(c, home[0], home[1])
 }
 
 /**
- * Some city centres (New York, Istanbul, Surabaya …) sit just off the 1:50m coastline or
- * across a border line. Move each such centre to the nearest point inside its country, so
- * that everything placed around it starts on land. Runs once, on first use.
+ * Some centres sit just off the 1:50m coastline or across a border line. Move each such
+ * centre to the nearest point inside its country, so that everything placed around it
+ * starts on land. Runs once, on first use.
  */
-let citiesSnapped = false
-export function snapCitiesToLand() {
-  if (citiesSnapped) return
-  citiesSnapped = true
+let centresSnapped = false
+export function snapCentresToLand() {
+  if (centresSnapped) return
+  centresSnapped = true
   for (const c of COUNTRIES) {
     if (!GEO.get(c.name)!.shape) continue
-    for (const city of c.cities) {
+    for (const city of c.centres) {
       if (insideCountry(c, city.lat, city.lon)) continue
       const cos = Math.max(0.2, Math.cos((city.lat * Math.PI) / 180))
       search: for (let r = 0.01; r <= 0.5; r += 0.01) {
@@ -265,7 +316,7 @@ export function snapCitiesToLand() {
   }
 }
 
-/** Spread (degrees, 1σ) of the small towns clustered around each listed city */
+/** Spread (degrees, 1σ) of the small towns clustered around each centre */
 export function townSigma(c: Country) {
   return Math.min(GEO.get(c.name)!.spread, 1.2)
 }
@@ -465,13 +516,14 @@ export function* populationGenerator(total: number, seed: number): Generator<Per
 }
 
 export interface Placement {
-  city: City
+  city: Centre
+  inCity: boolean
   urban: boolean
   home: LatLon
 }
 
 export function makePerson(id: number, c: Country, rng: Rng, placement?: Placement): Person {
-  snapCitiesToLand()
+  snapCentresToLand()
   const geo = GEO.get(c.name)!
   const wealth = wealthOf(c)
   const gender: Person["gender"] = rng() * 100 < c.femaleShare ? "Female" : "Male"
@@ -506,28 +558,31 @@ export function makePerson(id: number, c: Country, rng: Rng, placement?: Placeme
   }
 
   // where they live --------------------------------------------------------
-  const urban = placement ? placement.urban : rng() * 100 < c.urban
-  const city = placement ? placement.city : pickWeighted(rng, c.cities, c.cities.map((x) => x.weight))
+  const model = centreModel(c)
+  const inCity = placement ? placement.inCity : rng() < model.inside
+  const urban = placement ? placement.urban : rng() < (inCity ? model.urbanInside : model.urbanOutside)
+  const city = placement ? placement.city : c.centres[pickCumulative(rng, inCity ? model.byPop : model.bySpread)]
   const center: LatLon = [city.lat, city.lon]
   let home: LatLon = center
   if (placement) {
     home = placement.home
-  } else if (urban && rng() >= TOWN_SHARE) {
-    home = jitter(rng, center, urbanSigma(city))
-    for (let i = 0; i < 12 && !urbanHomeOk(c, city, home); i++) home = jitter(rng, center, urbanSigma(city))
-    if (!urbanHomeOk(c, city, home)) home = center
+  } else if (inCity) {
+    home = jitter(rng, center, city.sigma)
+    for (let i = 0; i < 12 && !cityHomeOk(c, home); i++) home = jitter(rng, center, city.sigma)
+    if (!cityHomeOk(c, home)) home = center
   } else {
-    // rural homes, or (for urban residents) a small town near the city
+    // a small town near the centre for urban residents, the countryside around it for everyone else
     const sigma = urban ? townSigma(c) : geo.spread
+    const min = outsideDist(city)
     let found = false
     for (let i = 0; i < 40 && !found; i++) {
-      const cand = jitter(rng, center, sigma)
-      if (inside(geo, cand[0], cand[1]) && degDistance(cand, center) > RURAL_MIN_DIST) {
+      const cand = jitter(rng, center, Math.max(sigma, min))
+      if (inside(geo, cand[0], cand[1]) && degDistance(cand, center) > min) {
         home = cand
         found = true
       }
     }
-    if (!found) home = jitter(rng, center, 0.15)
+    if (!found) home = jitter(rng, center, Math.max(0.15, min))
   }
 
   // education ---------------------------------------------------------------
@@ -671,10 +726,10 @@ export function makePerson(id: number, c: Country, rng: Rng, placement?: Placeme
     })
   }
   const commuteTarget = role === "Student" || role === "Pupil" ? school : work
-  const commute = clamp(0.15 + degDistance(home, commuteTarget) * 3.5 * (urban && city.weight > 0.6 ? 1.4 : 1), 0.15, 1.6)
+  const commute = clamp(0.15 + degDistance(home, commuteTarget) * 3.5 * (inCity && city.pop > 2 ? 1.4 : 1), 0.15, 1.6)
 
   const person: Person = {
-    id, represents: 0, detail: false, name, gender, age, country: c, city, urban, immigrant, origin, motherTongue, otherLanguages,
+    id, represents: 0, detail: false, name, gender, age, country: c, city, inCity, urban, immigrant, origin, motherTongue, otherLanguages,
     religion, devout, education, educationNote, role, occupation, nightShift, income,
     marital, children, household, internet, hobbies, wealth,
     wake, bed, workStart, workEnd, workDays: wealth > 0.55 ? 5 : 6, commute, phase: rng() * 1000,
@@ -720,10 +775,11 @@ function calibrationSample(c: Country): PoliticalTraits[] {
 
 export { EDUCATION_LEVELS }
 
-/** A random rural spot in a country, spread around its cities like rural homes are. */
+/** A random rural spot in a country, spread around its centres like rural homes are. */
 export function randomRuralSpot(c: Country, rng: Rng): LatLon {
+  snapCentresToLand()
   const geo = GEO.get(c.name)!
-  const city = pickWeighted(rng, c.cities, c.cities.map((x) => x.weight))
+  const city = c.centres[pickCumulative(rng, centreModel(c).bySpread)]
   const center: LatLon = [city.lat, city.lon]
   for (let i = 0; i < 40; i++) {
     const cand = jitter(rng, center, geo.spread)

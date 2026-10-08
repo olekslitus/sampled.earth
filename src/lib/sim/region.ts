@@ -1,6 +1,6 @@
-import { COUNTRIES, type City, type Country } from "./countries"
+import { COUNTRIES, type Centre, type Country } from "./countries"
 import {
-  RURAL_MIN_DIST, TOWN_SHARE, degDistance, insideCountry, jitter, ruralSigma, snapCitiesToLand, townSigma, urbanHomeOk, urbanSigma,
+  centreModel, cityHomeOk, degDistance, insideCountry, jitter, outsideDist, ruralSigma, snapCentresToLand, townSigma,
   type LatLon, type Placement,
 } from "./population"
 import { mulberry32, normal, type Rng } from "./rng"
@@ -55,7 +55,8 @@ export function regionContains(outer: Region, inner: Region) {
 }
 
 // ---------------------------------------------------------------------------
-// Population mass model: every city is two Gaussian blobs (urban and rural).
+// Population mass model: every urban centre is three Gaussian blobs (the centre itself, the
+// towns around it and the countryside around it), weighted as in population.ts.
 
 const MC = (() => {
   const rng = mulberry32(77)
@@ -78,9 +79,10 @@ function capFraction(sigma: number, D: number, R: number) {
 
 export interface Source {
   country: Country
-  city: City
-  urban: boolean
-  /** placed like rural homes: spread wide, on land, away from the city centre */
+  city: Centre
+  /** chance that someone from this source counts as urban */
+  urban: number
+  /** placed like rural homes: spread wide, on land, outside the built-up area */
   spread: boolean
   sigma: number
   /** millions of people from this source inside the region */
@@ -96,21 +98,24 @@ export interface RegionMass {
 }
 
 export function regionMass(r: Region, exclude?: Region | null): RegionMass {
-  snapCitiesToLand()
+  snapCentresToLand()
   const sources: Source[] = []
   for (const c of COUNTRIES) {
-    const W = c.cities.reduce((s, x) => s + x.weight, 0)
+    const m = centreModel(c)
+    const totalPop = m.byPop[m.byPop.length - 1]
+    const totalSpread = m.bySpread[m.bySpread.length - 1]
     const rs = ruralSigma(c)
-    for (const city of c.cities) {
+    const ts = townSigma(c)
+    for (const city of c.centres) {
       const D = angularDistance(r.lat, r.lon, city.lat, city.lon)
-      if (D > r.radius + 4 * rs) continue
-      const share = (c.population * city.weight) / W
-      const us = urbanSigma(city)
-      const u = c.urban / 100
+      if (D > r.radius + 4 * Math.max(rs, outsideDist(city))) continue
+      const inCity = (c.population * m.inside * city.pop) / totalPop
+      const around = (c.population * (1 - m.inside) * Math.sqrt(city.pop)) / totalSpread
+      const min = outsideDist(city)
       for (const [urban, spread, sigma, pop] of [
-        [true, false, us, share * u * (1 - TOWN_SHARE)],
-        [true, true, townSigma(c), share * u * TOWN_SHARE],
-        [false, true, rs, share * (1 - u)],
+        [m.urbanInside, false, city.sigma, inCity],
+        [1, true, Math.max(ts, min), around * m.urbanOutside],
+        [0, true, Math.max(rs, min), around * (1 - m.urbanOutside)],
       ] as const) {
         let mass = pop * capFraction(sigma, D, r.radius)
         if (exclude && mass > 0) {
@@ -164,9 +169,9 @@ export function samplePlacement(rng: Rng, m: RegionMass, r: Region, exclude?: Re
       }
       if (!inRegion(r, home[0], home[1])) continue
       if (exclude && inRegion(exclude, home[0], home[1])) continue
-      if (!s.spread && !urbanHomeOk(s.country, s.city, home)) continue
-      if (s.spread && (degDistance(home, center) < RURAL_MIN_DIST || !insideCountry(s.country, home[0], home[1]))) continue
-      return { country: s.country, city: s.city, urban: s.urban, home }
+      if (!s.spread && !cityHomeOk(s.country, home)) continue
+      if (s.spread && (degDistance(home, center) < outsideDist(s.city) || !insideCountry(s.country, home[0], home[1]))) continue
+      return { country: s.country, city: s.city, inCity: !s.spread, urban: rng() < s.urban, home }
     }
   }
   return null
