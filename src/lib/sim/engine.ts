@@ -39,21 +39,29 @@ export function localTime(utcMs: number, lon: number): LocalTime {
   return { dayIndex, weekday: weekdayOf(dayIndex), hour: (local - dayIndex * DAY_MS) / HOUR_MS }
 }
 
-/** [start, end) of the UTC year last seen by subsolarPoint, so it needs no Date per frame */
+/** [start, end, length in days] of the UTC year last seen by subsolarPoint, so it needs no Date per frame */
 const yearSpan = [1, 0, 0]
 
-/** Sub-solar point for a UTC instant (ignores the equation of time). Writes into `out` when given. */
+/**
+ * Sub-solar point for a UTC instant (NOAA's low-precision formulas, good to a few arc minutes,
+ * so it matches the Sun drawn in space). Writes into `out` when given.
+ */
 export function subsolarPoint(utcMs: number, out: LatLon = [0, 0]): LatLon {
   if (utcMs < yearSpan[0] || utcMs >= yearSpan[1]) {
     const year = new Date(utcMs).getUTCFullYear()
     yearSpan[0] = Date.UTC(year, 0, 1)
     yearSpan[1] = Date.UTC(year + 1, 0, 1)
-    yearSpan[2] = Date.UTC(year, 0, 0)
+    yearSpan[2] = (yearSpan[1] - yearSpan[0]) / DAY_MS
   }
-  const doy = (utcMs - yearSpan[2]) / DAY_MS
-  const decl = 23.44 * Math.sin(((2 * Math.PI) / 365) * (doy - 81))
+  // fractional year (radians)
+  const g = ((2 * Math.PI) / yearSpan[2]) * ((utcMs - yearSpan[0]) / DAY_MS)
+  const decl =
+    (0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g)) *
+    (180 / Math.PI)
+  const eqTimeMin = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g))
   const hours = (((utcMs % DAY_MS) + DAY_MS) % DAY_MS) / HOUR_MS
-  let lon = -(hours - 12) * 15
+  let lon = -(hours - 12 + eqTimeMin / 60) * 15
+  if (lon > 180) lon -= 360
   if (lon < -180) lon += 360
   out[0] = decl
   out[1] = lon

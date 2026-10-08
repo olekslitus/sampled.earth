@@ -2,7 +2,8 @@
 
 import { memo, useRef, type RefObject } from "react"
 import { Canvas, type RootState } from "@react-three/fiber"
-import { OrbitControls, Stars } from "@react-three/drei"
+import { OrbitControls } from "@react-three/drei"
+import type * as THREE from "three"
 
 import type { ColorScheme, Theme } from "@/lib/sim/attributes"
 import type { Simulation } from "@/lib/sim/engine"
@@ -20,6 +21,13 @@ import { UnrestLayer } from "./UnrestLayer"
 import { VitalLayer, type VitalStats } from "./VitalLayer"
 import { WeatherLayer } from "./WeatherLayer"
 import type { WeatherIndex } from "@/lib/weather/live"
+import { CosmicWeb, MicrowaveSky, MilkyWay, NearbyGalaxies } from "@/components/space/GalaxyLayers"
+import { Moon } from "@/components/space/Moon"
+import { SolarBodies, SolarLines } from "@/components/space/SolarLayers"
+import { SpaceRenderer } from "@/components/space/SpaceRenderer"
+import { ExoplanetSystems, SkyGlow, StarField } from "@/components/space/StarLayers"
+import type { SpaceView } from "@/components/space/view"
+import type { SpaceLive } from "@/components/space/data"
 
 export { MIN_ALTITUDE, type FlyTarget } from "./CameraRig"
 export type { MapStyle } from "./satellite"
@@ -64,9 +72,14 @@ export interface GlobeProps {
   disastersFetchedAt: number
   selectedDisasterId: string | null
   onPickDisaster: (d: Disaster) => void
+  /** the zoom out into space */
+  space: SpaceView
+  /** live probe paths and exoplanets (null until loaded) */
+  spaceLive: SpaceLive | null
+  /** galaxies and the cosmic web load once you head that way */
+  deepSpace: boolean
+  selectedSpaceKey: string | null
 }
-
-const BACKGROUND: Record<Theme, string> = { dark: "#04060c", light: "#e9eef5" }
 
 /** Reading shader logs forces a synchronous wait for every program link on first use */
 function disableShaderChecksInProduction({ gl }: RootState) {
@@ -78,6 +91,8 @@ function Globe(props: GlobeProps) {
   /** per-slot base point size (0 = not drawn); shared by renderer and picker */
   const sizesRef = useRef<Float32Array>(new Float32Array(0))
   const extraPickRef = useRef<ExtraPick | null>(null)
+  const overlaysRef = useRef<THREE.Group>(null)
+  const trackKey = props.selectedSpaceKey?.startsWith("track:") ? props.selectedSpaceKey.slice(6) : null
   return (
     <Canvas
       camera={{ position: [0, 0.9, 3.1], fov: 45, near: 0.01, far: 300 }}
@@ -85,8 +100,21 @@ function Globe(props: GlobeProps) {
       gl={{ antialias: true }}
       onCreated={disableShaderChecksInProduction}
     >
-      <color attach="background" args={[BACKGROUND[props.theme]]} />
-      {props.theme === "dark" && <Stars radius={80} depth={60} count={4000} factor={2.2} saturation={0} fade speed={0.3} />}
+      <SpaceRenderer sim={props.sim} view={props.space} theme={props.theme} overlaysRef={overlaysRef} />
+      <SkyGlow view={props.space} />
+      <StarField view={props.space} />
+      {props.spaceLive && <ExoplanetSystems view={props.space} systems={props.spaceLive.systems} />}
+      <SolarLines view={props.space} tracks={props.spaceLive?.tracks ?? []} selected={trackKey} />
+      <SolarBodies view={props.space} />
+      {props.deepSpace && (
+        <>
+          <MilkyWay view={props.space} />
+          <NearbyGalaxies view={props.space} />
+          <CosmicWeb view={props.space} />
+          <MicrowaveSky view={props.space} />
+        </>
+      )}
+      <Moon view={props.space} />
       <SimDriver sim={props.sim} speedRef={props.speedRef} detailEnabled={props.detailEnabled} altitudeRef={props.altitudeRef} />
       {props.mapStyle === "satellite" ? (
         <SatelliteEarth sim={props.sim} showNight={props.showNight} sentinel={props.sentinel} onSentinelShown={props.onSentinelShown} />
@@ -105,6 +133,7 @@ function Globe(props: GlobeProps) {
           theme={props.theme}
         />
       )}
+      <group ref={overlaysRef}>
       <Borders theme={props.theme} mapStyle={props.mapStyle} />
       {props.showUnrest && <UnrestLayer onPick={props.onPickHotspot} />}
       <People
@@ -134,6 +163,7 @@ function Globe(props: GlobeProps) {
       <CityLabels theme={props.mapStyle === "satellite" ? "dark" : props.theme} />
       {props.selectedId != null && <SelectionMarker sim={props.sim} id={props.selectedId} />}
       {props.hoveredId != null && props.hoveredId !== props.selectedId && <HoverLabel sim={props.sim} id={props.hoveredId} />}
+      </group>
       <Picker sim={props.sim} sizesRef={sizesRef} extraRef={extraPickRef} onSelect={props.onSelect} onHover={props.onHover} />
       <CameraRig
         sim={props.sim}
@@ -141,6 +171,7 @@ function Globe(props: GlobeProps) {
         follow={props.follow}
         flyToRef={props.flyToRef}
         autoRotate={props.autoRotate && props.selectedId == null}
+        space={props.space}
       />
       <OrbitControls makeDefault enablePan={false} enableZoom={false} enableDamping dampingFactor={0.08} />
     </Canvas>

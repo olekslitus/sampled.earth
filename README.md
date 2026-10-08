@@ -34,6 +34,13 @@ Live weather (clouds from five geostationary satellites, rain and snow from NASA
 bun --env-file=.env.local scripts/update-weather.ts
 ```
 
+Zooming out leaves Earth for the Moon, the planets, the stars, the Milky Way, the Local Group, the cosmic web and the edge of the observable universe. The star, galaxy and sky catalogues and the planet textures are in `public/space/`; spacecraft paths (JPL Horizons) and exoplanets (NASA Exoplanet Archive) are refreshed daily in Blob by a cron that calls `/api/space`. To rebuild or refresh them:
+
+```bash
+bun scripts/fetch-space.ts                            # catalogues and textures in public/space/
+bun --env-file=.env.local scripts/update-space.ts     # live spacecraft and exoplanets to Blob
+```
+
 Natural disasters load live in the browser from USGS, GDACS and NASA EONET. Every source and assumption is listed on the [methodology page](https://sampled.earth/methodology) (`src/app/methodology/page.tsx`).
 
 ## Stack

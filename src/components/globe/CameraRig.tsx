@@ -6,16 +6,20 @@ import { useEffect, useMemo, useRef, type RefObject } from "react"
 import * as THREE from "three"
 import { useFrame, useThree } from "@react-three/fiber"
 
+import type { SpaceView } from "@/components/space/view"
+import { logStep } from "@/components/space/view"
 import type { Simulation, View } from "@/lib/sim/engine"
 import { angularDistance, makeRegion } from "@/lib/sim/region"
 import { latLonToXYZ, xyzToLatLon } from "@/lib/sim/sphere"
+import { earthSpinAngle } from "@/lib/space/frames"
 import { visibleRadius } from "./util"
 
 export type FlyTarget = { kind: "person"; id: number } | { kind: "point"; lat: number; lon: number; alt: number }
 
 /** Closest the camera may get: ~16 km above the surface */
 export const MIN_ALTITUDE = 0.0025
-const MAX_ALTITUDE = 5
+/** Farthest: beyond the edge of the observable universe (≈150 billion light-years) */
+const MAX_ALTITUDE = 2.2e20
 /** Below this visible radius (degrees) extra people are spawned in view */
 const DETAIL_ON_RADIUS = 26
 const DETAIL_OFF_RADIUS = 32
@@ -85,21 +89,24 @@ export function SimDriver({
 }
 
 // ---------------------------------------------------------------------------
-// Camera: altitude-based zoom (wheel / pinch, towards the cursor), fly-to, follow
+// Camera: altitude-based zoom (wheel / pinch, towards the cursor), fly-to, follow, and the
+// zoom out into space (flights between scales; far out the camera holds still in the sky
+// while Earth turns under it)
 
 export function CameraRig({
-  sim, selectedId, follow, flyToRef, autoRotate,
+  sim, selectedId, follow, flyToRef, autoRotate, space,
 }: {
   sim: Simulation
   selectedId: number | null
   follow: boolean
   flyToRef: RefObject<FlyTarget | null>
   autoRotate: boolean
+  space: SpaceView
 }) {
   const { camera, gl } = useThree()
   const controls = useThree((s) => s.controls) as { rotateSpeed: number; autoRotate: boolean; autoRotateSpeed: number } | null
   const targetAlt = useRef(camera.position.length() - 1)
-  const scratch = useMemo(() => ({ target: new THREE.Vector3(), dir: new THREE.Vector3(), v: [0, 0, 0] }), [])
+  const scratch = useMemo(() => ({ target: new THREE.Vector3(), dir: new THREE.Vector3(), v: [0, 0, 0], spin: NaN, yAxis: new THREE.Vector3(0, 1, 0), toEarth: new THREE.Matrix4() }), [])
 
   useEffect(() => {
     const el = gl.domElement
@@ -111,10 +118,19 @@ export function CameraRig({
     const ndc = new THREE.Vector2()
 
     const zoomBy = (factor: number, clientX: number, clientY: number) => {
+      // a wheel or pinch takes over from a flight
+      if (space.flight) {
+        space.flight = null
+        targetAlt.current = camera.position.length() - 1
+      }
       const before = targetAlt.current
-      targetAlt.current = Math.min(MAX_ALTITUDE, Math.max(MIN_ALTITUDE, before * factor))
+      // out in space each step covers more ground, so the way to the edge isn't endless
+      const boost = 1 + 0.6 * logStep(Math.max(before, 1e-6), 3, 40)
+      factor = Math.pow(factor, boost)
+      const min = space.focus ? Math.max(MIN_ALTITUDE, space.focus.dist * 0.3) : MIN_ALTITUDE
+      targetAlt.current = Math.min(MAX_ALTITUDE, Math.max(min, before * factor))
       const f = targetAlt.current / before
-      if (f >= 1) return
+      if (f >= 1 || space.focus) return
       // zoom towards the point under the cursor
       const rect = el.getBoundingClientRect()
       ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1)
@@ -168,14 +184,29 @@ export function CameraRig({
       el.removeEventListener("pointerup", onPointerUp)
       el.removeEventListener("pointercancel", onPointerUp)
     }
-  }, [camera, gl])
+  }, [camera, gl, space])
 
   useFrame((state, delta) => {
     const cam = state.camera as THREE.PerspectiveCamera
     const { target, dir, v } = scratch
 
+    // far out, hold still in the sky while Earth turns underneath ------------------------
+    const spin = earthSpinAngle(space.time)
+    if (Number.isFinite(scratch.spin)) {
+      let d = spin - scratch.spin
+      d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI
+      const still = space.focus ? 1 : logStep(Math.max(cam.position.length() - 1, 1e-6), 6, 60)
+      if (still > 0) cam.position.applyAxisAngle(scratch.yAxis, -d * still)
+    }
+    scratch.spin = spin
+
     // fly-to (a person or a place) and follow steer the camera direction --------
-    const fly = flyToRef.current
+    let fly = flyToRef.current
+    // a place on Earth picked while out in space: fly home first
+    if (fly && !space.flight && (space.focus || cam.position.length() > 40)) {
+      space.flyTo(null, 1 + (fly.kind === "point" ? fly.alt : 0.9))
+    }
+    if (space.flight) fly = null
     let aim = false
     let flyAlt = 0.9
     if (fly?.kind === "point") {
@@ -204,23 +235,43 @@ export function CameraRig({
       }
     }
 
-    // smooth altitude changes ---------------------------------------------------
+    // a flight may also swing the camera round to a better side
+    const look = space.flight?.look
+    if (look) {
+      target.set(look[0]!, look[1]!, look[2]!).applyMatrix4(scratch.toEarth.copy(space.earthToSky).invert())
+      const length = cam.position.length()
+      dir.copy(cam.position).normalize().lerp(target, 1 - Math.exp(-delta * 2.2)).normalize()
+      cam.position.copy(dir).multiplyScalar(length)
+    }
+
+    // smooth altitude changes, or a flight between scales ----------------------------
     const alt = Math.max(MIN_ALTITUDE * 0.5, cam.position.length() - 1)
-    const nextAlt = Math.exp(Math.log(alt) + (Math.log(targetAlt.current) - Math.log(alt)) * (1 - Math.exp(-delta * 9)))
+    const flightDist = space.stepFlight(delta, space.pivot)
+    let nextAlt: number
+    if (flightDist != null) {
+      nextAlt = Math.max(MIN_ALTITUDE, flightDist - 1)
+      targetAlt.current = nextAlt
+    } else {
+      nextAlt = Math.exp(Math.log(alt) + (Math.log(targetAlt.current) - Math.log(alt)) * (1 - Math.exp(-delta * 9)))
+    }
     cam.position.setLength(1 + nextAlt)
     cam.lookAt(0, 0, 0)
+    if (flightDist == null) space.restingPivot(1 + nextAlt, space.pivot)
 
     // keep depth precision and controls sensible at every altitude ---------------
     const near = Math.min(0.1, Math.max(0.0004, nextAlt * 0.3))
-    if (Math.abs(near - cam.near) / cam.near > 0.1) {
+    // (the Moon is 60 Earth radii out)
+    const far = Math.max(300, (1 + nextAlt) * 3)
+    if (Math.abs(near - cam.near) / cam.near > 0.1 || Math.abs(far - cam.far) / cam.far > 0.1) {
       cam.near = near
+      cam.far = far
       cam.updateProjectionMatrix()
     }
     if (controls) {
       // dragging moves the globe about as far as the cursor: the closer, the slower it turns
       const span = (2 * visibleRadius(cam, state.size.width / state.size.height, true) * Math.PI) / 180
       controls.rotateSpeed = Math.min(0.8, Math.max(0.0008, (span / (2 * Math.PI)) * 0.9))
-      controls.autoRotate = autoRotate
+      controls.autoRotate = autoRotate && !space.flight
       controls.autoRotateSpeed = 0.3 * Math.min(1, nextAlt / 2.2)
     }
   })

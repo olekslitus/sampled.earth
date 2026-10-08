@@ -20,6 +20,14 @@ import type { Hotspot } from "@/lib/sim/unrest"
 import type { Disaster, DisasterKind } from "@/lib/disasters"
 import { useDisasters } from "@/lib/useDisasters"
 import { useWeather } from "@/lib/weather/live"
+import { loadGalaxies, loadLive, loadStars, useLoaded } from "@/components/space/data"
+import { focusFor, useSpaceItems, type SpaceItem } from "@/components/space/items"
+import { ScaleLadder } from "@/components/space/ScaleLadder"
+import { SpaceCard } from "@/components/space/SpaceCard"
+import { SpaceLabels } from "@/components/space/SpaceLabels"
+import { SpacePanel } from "@/components/space/SpacePanel"
+import { SpaceView, type Level } from "@/components/space/view"
+import { LY } from "@/lib/space/units"
 
 /** Read a saved value; storage can be unavailable (private mode, blocked site data) */
 function load<T>(key: string, fallback: T): T {
@@ -184,6 +192,25 @@ export default function SampledEarth() {
   const [tab, setTab] = useState<ControlTab>("view")
   const flyToRef = useRef<FlyTarget | null>(null)
 
+  // space ------------------------------------------------------------------------------
+  const [space] = useState(() => new SpaceView())
+  const [spaceKey, setSpaceKey] = useState<string | null>(null)
+  /** live data loads once you leave Earth (or open the Layers tab); galaxies once you leave the stars */
+  const [spaceWanted, setSpaceWanted] = useState(false)
+  const [deepSpace, setDeepSpace] = useState(false)
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (space.distanceFromEarth > 40) setSpaceWanted(true)
+      if (space.dist > 0.3 * LY) setDeepSpace(true)
+    }, 500)
+    return () => clearInterval(t)
+  }, [space])
+  const stars = useLoaded("stars", loadStars)
+  const spaceLive = useLoaded("live", loadLive, spaceWanted || tab === "layers")
+  const galaxies = useLoaded("galaxies", loadGalaxies, deepSpace)
+  const spaceItems = useSpaceItems(space, spaceLive, stars, galaxies)
+  const spaceItem = spaceKey ? (spaceItems.find((i) => i.key === spaceKey) ?? null) : null
+
   useEffect(() => {
     sim.setExaggeration(exaggeration)
   }, [sim, exaggeration])
@@ -257,12 +284,38 @@ export default function SampledEarth() {
     })
   }, [sim, selectedId, onSelect])
 
+  const pickSpace = useCallback(
+    (item: SpaceItem | null) => {
+      setSpaceKey(item?.key ?? null)
+      if (!item) return
+      setSelectedId(null)
+      setFollow(false)
+      setDisaster(null)
+      setHotspot(null)
+      setPanelOpen(false)
+      setSpaceWanted(true)
+      if (item.frame > 0.3 * LY) setDeepSpace(true)
+      space.flyTo(item.key === "body:Earth" ? null : focusFor(item), item.frame)
+    },
+    [space],
+  )
+  const goToLevel = useCallback(
+    (level: Level) => {
+      setSpaceKey(null)
+      setSpaceWanted(true)
+      if (level.dist > 0.3 * LY) setDeepSpace(true)
+      space.flyTo(null, level.dist, level.from)
+    },
+    [space],
+  )
+
   // Escape closes the topmost card (person, then disaster, then hotspot) and nothing else.
   const onKeyDown = useEffectEvent((e: KeyboardEvent) => {
     if (e.key !== "Escape" || e.defaultPrevented) return
     if (selectedId != null) onSelect(null)
     else if (disaster) setDisaster(null)
     else if (hotspot) setHotspot(null)
+    else if (spaceKey) setSpaceKey(null)
     else return
     e.preventDefault()
   })
@@ -298,6 +351,7 @@ export default function SampledEarth() {
   const personShown = selectedId != null
   const disasterShown = !personShown && disaster != null && disasterFeed != null
   const hotspotShown = !personShown && !disasterShown && hotspot != null
+  const spaceShown = !personShown && !disasterShown && !hotspotShown && spaceItem != null
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-background text-foreground">
@@ -333,8 +387,14 @@ export default function SampledEarth() {
           disastersFetchedAt={disasterFeed?.fetchedAt ?? 0}
           selectedDisasterId={disaster?.id ?? null}
           onPickDisaster={pickDisaster}
+          space={space}
+          spaceLive={spaceLive}
+          deepSpace={deepSpace}
+          selectedSpaceKey={spaceKey}
         />
       </div>
+      <SpaceLabels view={space} items={spaceItems} selectedKey={spaceKey} onPick={pickSpace} />
+      <ScaleLadder view={space} onLevel={goToLevel} cardOpen={personShown || disasterShown || hotspotShown || spaceShown} />
 
       <ControlPanel
         sim={sim}
@@ -436,6 +496,7 @@ export default function SampledEarth() {
             hiddenKinds={hiddenKinds}
             onHiddenKinds={setHiddenKinds}
             onPickDisaster={pickDisaster}
+            space={<SpacePanel items={spaceItems} live={spaceLive} onPick={pickSpace} />}
           />
         }
         settings={
@@ -470,8 +531,9 @@ export default function SampledEarth() {
       )}
       {disasterShown && <DisasterCard d={disaster} now={disasterFeed.fetchedAt} onClose={() => setDisaster(null)} />}
       {hotspotShown && <HotspotCard hotspot={hotspot} onClose={() => setHotspot(null)} />}
+      {spaceShown && <SpaceCard item={spaceItem} view={space} onClose={() => setSpaceKey(null)} onFly={() => pickSpace(spaceItem)} />}
 
-      {!hintDone && !personShown && !disasterShown && !hotspotShown && <TapHint />}
+      {!hintDone && !personShown && !disasterShown && !hotspotShown && !spaceShown && <TapHint />}
       <StatusBar sim={sim} altitudeRef={altitudeRef} showVital={showVital} vitalRef={vitalRef} hasSelection={personShown} />
       {mapStyle === "satellite" && sentinelShown && (
         <a

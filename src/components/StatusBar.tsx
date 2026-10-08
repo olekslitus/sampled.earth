@@ -7,9 +7,11 @@ import { emptyVitalStats, type VitalStats } from "@/components/globe/VitalLayer"
 import { usePolled, useTicker } from "@/components/hooks"
 import { formatPeople, formatUtc } from "@/components/panels/format"
 import type { Simulation } from "@/lib/sim/engine"
+import { formatDistance } from "@/lib/space/units"
 import { cn } from "@/lib/utils"
 
 function formatAltitude(alt: number) {
+  if (alt > 150) return formatDistance(alt)
   const km = alt * 6371
   return km >= 1000 ? `${(km / 1000).toFixed(1)}k km` : `${Math.round(km)} km`
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import type { RefObject } from "react"
+import type { ReactNode, RefObject } from "react"
 import { Baby, Cloud, CloudRain, MapIcon, PawPrint, RefreshCw, Satellite, Siren, Tornado } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -72,6 +72,8 @@ interface LayersPanelProps {
   hiddenKinds: DisasterKind[]
   onHiddenKinds: (k: DisasterKind[]) => void
   onPickDisaster: (d: Disaster) => void
+  /** the Space section (spacecraft, findings) */
+  space: ReactNode
 }
 
 export function LayersPanel(props: LayersPanelProps) {
@@ -129,6 +131,9 @@ export function LayersPanel(props: LayersPanelProps) {
         </div>
         {(props.showClouds || props.showPrecip) && <WeatherNote weather={props.weather} error={props.weatherError} />}
       </section>
+
+      {/* Space --------------------------------------------------------------------- */}
+      {props.space}
 
       {/* Births & deaths ----------------------------------------------------------- */}
       <section className="space-y-2">

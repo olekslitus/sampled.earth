@@ -281,6 +281,37 @@ export default function MethodologyPage() {
               simulated time.
             </li>
             <li>
+              <b>Space</b>: the Sun, Moon and planets from{" "}
+              <a className="underline underline-offset-2" href="https://github.com/cosinekitty/astronomy">
+                Astronomy Engine
+              </a>{" "}
+              (MIT licence), with textures by{" "}
+              <a className="underline underline-offset-2" href="https://www.solarsystemscope.com/textures/">
+                Solar System Scope
+              </a>{" "}
+              (CC BY 4.0). Spacecraft, interstellar visitors and asteroid 2024 YR4 from{" "}
+              <a className="underline underline-offset-2" href="https://ssd.jpl.nasa.gov/horizons/">
+                NASA JPL Horizons
+              </a>{" "}
+              and every confirmed exoplanet from the{" "}
+              <a className="underline underline-offset-2" href="https://exoplanetarchive.ipac.caltech.edu">
+                NASA Exoplanet Archive
+              </a>
+              , both refreshed daily. Stars from the{" "}
+              <a className="underline underline-offset-2" href="https://github.com/astronexus/HYG-Database">
+                HYG database
+              </a>{" "}
+              v4.1 (CC BY-SA 4.0); the Milky Way’s glow from NASA SVS{" "}
+              <a className="underline underline-offset-2" href="https://svs.gsfc.nasa.gov/4851">
+                Deep Star Maps 2020
+              </a>
+              . Nearby galaxies from the Updated Nearby Galaxy Catalog (Karachentsev et al. 2013) and the cosmic web from the 2MASS Redshift
+              Survey (Huchra et al. 2012), both via CDS VizieR, with distances from redshift for the latter. The microwave background is
+              NASA’s WMAP nine-year map. The Milky Way, Andromeda and Triangulum themselves are models built from their known arms, bars and
+              orientations, not photographs: no one has seen our galaxy from outside. Planets and spacecraft are shown at their real
+              positions; a marker’s size is not its real size.
+            </li>
+            <li>
               <b>Icons and flags</b>: <a className="underline underline-offset-2" href="https://lucide.dev">Lucide</a> (ISC
               licence) and <a className="underline underline-offset-2" href="https://gitlab.com/catamphetamine/country-flag-icons">country-flag-icons</a>{" "}
               (MIT licence).

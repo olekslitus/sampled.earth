@@ -280,6 +280,9 @@ class ScreenProjector {
   }
 }
 
+/** Camera distance (Earth radii) beyond which nothing on the globe is picked */
+export const FAR_FROM_EARTH = 40
+
 export function Picker({
   sim, sizesRef, extraRef, onSelect, onHover,
 }: {
@@ -349,8 +352,10 @@ export function Picker({
     const onDown = (e: PointerEvent) => {
       down = { x: e.clientX, y: e.clientY }
     }
+    /** out in space the globe is a dot; space labels and markers take the clicks */
+    const tooFar = () => camera.position.length() > FAR_FROM_EARTH
     const onUp = (e: PointerEvent) => {
-      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) {
+      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5 && !tooFar()) {
         const hit = pickExtra(e.clientX, e.clientY)
         if (hit != null) extraRef.current!.onSelect(hit)
         else handlers.current.onSelect(pick(e.clientX, e.clientY))
@@ -358,7 +363,7 @@ export function Picker({
       down = null
     }
     const onMove = (e: PointerEvent) => {
-      if (e.buttons) return
+      if (e.buttons || tooFar()) return
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
         const hit = pickExtra(e.clientX, e.clientY)
