@@ -91,7 +91,7 @@ function Globe(props: GlobeProps) {
         sizesRef={sizesRef}
       />
       {props.showVital && <VitalLayer sim={props.sim} speedRef={props.speedRef} theme={props.theme} statsRef={props.vitalStatsRef} />}
-      {props.animals.length > 0 && <AnimalLayer sim={props.sim} species={props.animals} />}
+      {props.animals.length > 0 && <AnimalLayer sim={props.sim} species={props.animals} theme={props.theme} />}
       {props.disasters.length > 0 && (
         <DisasterLayer
           events={props.disasters}

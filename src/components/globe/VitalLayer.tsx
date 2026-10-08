@@ -1,4 +1,5 @@
 "use client"
+/* oxlint-disable react/immutability -- uniforms and event buffers are updated imperatively in the frame loop */
 
 import { useEffect, useMemo, useRef, type RefObject } from "react"
 import * as THREE from "three"

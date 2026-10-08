@@ -1,20 +1,21 @@
 "use client"
-/* eslint-disable react-hooks/immutability -- uniforms and label styles are updated imperatively in the frame loop */
+/* oxlint-disable react/immutability -- uniforms and label styles are updated imperatively in the frame loop */
 
 import { useEffect, useMemo, useRef } from "react"
 import * as THREE from "three"
 import { useFrame } from "@react-three/fiber"
 import { Html } from "@react-three/drei"
+import { Megaphone, Swords, TriangleAlert, type LucideIcon } from "lucide-react"
 
 import { latLonToXYZ } from "@/lib/sim/sphere"
 import { HOTSPOTS, type Hotspot, type UnrestLevel } from "@/lib/sim/unrest"
 import { hexToRgb } from "./util"
 
 /** Status colours (never reused for data series); always paired with an icon and label */
-export const LEVEL_STYLE: Record<UnrestLevel, { color: string; icon: string }> = {
-  War: { color: "#d03b3b", icon: "⚔️" },
-  "Armed conflict": { color: "#ec835a", icon: "⚠️" },
-  Unrest: { color: "#fab219", icon: "📢" },
+export const LEVEL_STYLE: Record<UnrestLevel, { color: string; icon: LucideIcon }> = {
+  War: { color: "#d03b3b", icon: Swords },
+  "Armed conflict": { color: "#ec835a", icon: TriangleAlert },
+  Unrest: { color: "#fab219", icon: Megaphone },
 }
 
 const vertex = /* glsl */ `
@@ -98,7 +99,7 @@ function HotspotLabel({ spot, onPick }: { spot: Hotspot; onPick: (s: Hotspot) =>
         title={`${spot.level}: ${spot.summary}`}
         className="flex -translate-x-1/2 -translate-y-[140%] items-center gap-1 whitespace-nowrap rounded-full border border-border bg-popover/85 px-2 py-0.5 text-[11px] text-popover-foreground shadow-sm backdrop-blur transition-opacity hover:bg-popover"
       >
-        <span aria-hidden>{style.icon}</span>
+        <style.icon className="size-3 shrink-0" style={{ color: style.color }} strokeWidth={2.5} aria-hidden />
         <span className="font-medium">{spot.name}</span>
         <span className="text-muted-foreground">· {spot.level}</span>
       </button>

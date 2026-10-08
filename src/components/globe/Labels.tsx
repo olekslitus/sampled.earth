@@ -6,7 +6,8 @@ import { useFrame } from "@react-three/fiber"
 import { Html } from "@react-three/drei"
 
 import type { Theme } from "@/lib/sim/attributes"
-import { COUNTRIES, flagEmoji } from "@/lib/sim/countries"
+import { COUNTRIES } from "@/lib/sim/countries"
+import { CountryFlag } from "@/components/CountryFlag"
 import type { Simulation } from "@/lib/sim/engine"
 import { latLonToXYZ } from "@/lib/sim/sphere"
 import { pointSizeFor, visibleRadius } from "./util"
@@ -65,7 +66,7 @@ export function HoverLabel({ sim, id }: { sim: Simulation; id: number }) {
           className="ml-3 -translate-y-1/2 whitespace-nowrap rounded-md border border-border bg-popover/90 px-2 py-1 text-xs text-popover-foreground shadow-lg backdrop-blur"
         >
           <div className="font-medium">
-            {flagEmoji(p.country.iso2)} {p.name}, {p.age}
+            <CountryFlag iso2={p.country.iso2} /> {p.name}, {p.age}
           </div>
           <div ref={activity} className="text-muted-foreground">
             {sim.blocks[slot]?.label}

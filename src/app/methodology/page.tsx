@@ -247,6 +247,11 @@ export default function MethodologyPage() {
               <b>Borders</b>: Natural Earth via the <code className="rounded bg-muted px-1 py-0.5 text-sm">world-atlas</code>{" "}
               package (1:50m, and 1:10m when zoomed in).
             </li>
+            <li>
+              <b>Icons and flags</b>: <a className="underline underline-offset-2" href="https://lucide.dev">Lucide</a> (ISC
+              licence) and <a className="underline underline-offset-2" href="https://gitlab.com/catamphetamine/country-flag-icons">country-flag-icons</a>{" "}
+              (MIT licence).
+            </li>
           </ul>
         </Section>
 

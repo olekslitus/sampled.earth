@@ -1,24 +1,30 @@
 "use client"
-/* eslint-disable react-hooks/immutability -- uniforms and buffers are updated imperatively in the frame loop */
+/* oxlint-disable react/immutability -- uniforms and buffers are updated imperatively in the frame loop */
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import * as THREE from "three"
 import { useFrame, useThree } from "@react-three/fiber"
 import { Html } from "@react-three/drei"
+import { CloudLightning, Flame, Mountain, Snowflake, Sun, Tornado, Waves, type IconNode } from "lucide"
 
 import type { AlertLevel, Disaster, DisasterKind } from "@/lib/disasters"
 import type { Theme } from "@/lib/sim/attributes"
 import { latLonToXYZ } from "@/lib/sim/sphere"
+import { lucideAtlas } from "./iconAtlas"
 import { FACING_GLSL, hexToRgb } from "./util"
 
 /** Status colours (paired with a label wherever they appear) */
 export const ALERT_COLOR: Record<AlertLevel, string> = { Green: "#0ca30c", Orange: "#ec835a", Red: "#d03b3b" }
-export const KIND_EMOJI: Record<DisasterKind, string> = {
-  Earthquake: "", "Tropical cyclone": "🌀", Flood: "🌊", Wildfire: "🔥", Volcano: "🌋", Drought: "🏜️", "Severe storm": "⛈️", Iceberg: "🧊",
+/** Globe marker glyphs: the same Lucide icons as the disaster card (quakes are drawn as rings) */
+const KIND_GLYPH: Partial<Record<DisasterKind, IconNode>> = {
+  "Tropical cyclone": Tornado, Flood: Waves, Wildfire: Flame, Volcano: Mountain, Drought: Sun, "Severe storm": CloudLightning, Iceberg: Snowflake,
 }
-const ICON_KINDS = (Object.keys(KIND_EMOJI) as DisasterKind[]).filter((k) => KIND_EMOJI[k])
+const ICON_KINDS = Object.keys(KIND_GLYPH) as DisasterKind[]
 /** quake rings without an alert level: high-contrast ink rather than a status colour */
 const INK: Record<Theme, string> = { dark: "#e8e6df", light: "#2c313b" }
+/** icon discs without an alert level, and the outline that separates every disc from the map */
+const NEUTRAL: Record<Theme, string> = { dark: "#56607a", light: "#6b7180" }
+const OUTLINE: Record<Theme, string> = { dark: "#0b1020", light: "#ffffff" }
 const TRACK: Record<Theme, string> = { dark: "#c3c2b7", light: "#52514e" }
 
 /** Lets the shared picker hit-test disasters before people */
@@ -31,22 +37,9 @@ export interface ExtraPick {
   onHover: (i: number | null) => void
 }
 
-const CELL = 64
 let atlas: THREE.CanvasTexture | null = null
 function getAtlas() {
-  if (atlas) return atlas
-  const canvas = document.createElement("canvas")
-  canvas.width = ICON_KINDS.length * CELL
-  canvas.height = CELL
-  const ctx = canvas.getContext("2d")!
-  ctx.textAlign = "center"
-  ctx.textBaseline = "middle"
-  ctx.font = `${CELL * 0.72}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`
-  ICON_KINDS.forEach((k, i) => ctx.fillText(KIND_EMOJI[k], i * CELL + CELL / 2, CELL / 2 + CELL * 0.04))
-  atlas = new THREE.CanvasTexture(canvas)
-  atlas.flipY = false
-  atlas.colorSpace = THREE.NoColorSpace
-  atlas.minFilter = THREE.LinearMipmapLinearFilter
+  atlas ??= lucideAtlas(ICON_KINDS.map((k) => KIND_GLYPH[k]!))
   return atlas
 }
 
@@ -55,12 +48,10 @@ const vertex = /* glsl */ `
   attribute float aIcon;
   attribute float aAge;
   attribute vec3 aColor;
-  attribute float aRing;
   uniform float uScale;
   varying float vIcon;
   varying float vAge;
   varying vec3 vColor;
-  varying float vRing;
   varying float vAlpha;
   ${FACING_GLSL}
   void main() {
@@ -68,7 +59,6 @@ const vertex = /* glsl */ `
     vIcon = aIcon;
     vAge = aAge;
     vColor = aColor;
-    vRing = aRing;
     // older events fade back
     vAlpha = smoothstep(0.0, 0.08, facing) * mix(1.0, 0.45, clamp(aAge / 30.0, 0.0, 1.0));
     if (facing <= 0.0) {
@@ -83,10 +73,10 @@ const vertex = /* glsl */ `
 const fragment = /* glsl */ `
   uniform sampler2D uAtlas;
   uniform float uTime;
+  uniform vec3 uOutline;
   varying float vIcon;
   varying float vAge;
   varying vec3 vColor;
-  varying float vRing;
   varying float vAlpha;
   void main() {
     vec2 c = gl_PointCoord - 0.5;
@@ -104,15 +94,17 @@ const fragment = /* glsl */ `
       }
       col = vec4(vColor, a);
     } else {
-      vec2 uv = (gl_PointCoord - 0.5) / 0.74 + 0.5;
-      vec4 icon = vec4(0.0);
+      // a disc in the alert colour with a white glyph, outlined in the surface colour
+      float fill = 1.0 - smoothstep(0.78, 0.86, d);
+      float rim = 1.0 - smoothstep(0.92, 1.0, d);
+      vec2 uv = (gl_PointCoord - 0.5) / 0.56 + 0.5;
+      float glyph = 0.0;
       if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
-        icon = texture2D(uAtlas, vec2((vIcon + uv.x) / ${ICON_KINDS.length.toFixed(1)}, uv.y));
-        icon.rgb /= max(icon.a, 0.001);
+        glyph = texture2D(uAtlas, vec2((vIcon + uv.x) / ${ICON_KINDS.length.toFixed(1)}, uv.y)).a;
       }
-      float halo = vRing * (1.0 - smoothstep(0.0, 0.1, abs(d - 0.9)));
-      col = mix(vec4(vColor, halo), vec4(icon.rgb, 1.0), icon.a);
-      col.a = max(halo, icon.a);
+      vec3 rgb = mix(uOutline, vColor, fill);
+      rgb = mix(rgb, vec3(1.0), glyph * fill);
+      col = vec4(rgb, rim);
     }
     if (col.a < 0.03) discard;
     gl_FragColor = vec4(col.rgb, col.a * vAlpha);
@@ -140,18 +132,17 @@ export function DisasterLayer({
     const icon = new Float32Array(n)
     const age = new Float32Array(n)
     const color = new Float32Array(n * 3)
-    const ring = new Float32Array(n)
     const radius = new Float32Array(n)
     const ink = hexToRgb(INK[theme])
+    const neutral = hexToRgb(NEUTRAL[theme])
     events.forEach((d, i) => {
       latLonToXYZ(d.lat, d.lon, 1.0015, xyz, i * 3)
       const quake = d.kind === "Earthquake"
       size[i] = quake ? 7 + Math.max(0, (d.magnitude ?? 4.5) - 4.5) * 7 : d.notable ? 22 : 17
       icon[i] = quake ? -1 : ICON_KINDS.indexOf(d.kind)
       age[i] = Math.max(0, (now - d.updated) / 86_400_000)
-      const rgb = d.alert ? hexToRgb(ALERT_COLOR[d.alert]) : ink
+      const rgb = d.alert ? hexToRgb(ALERT_COLOR[d.alert]) : quake ? ink : neutral
       color.set(rgb, i * 3)
-      ring[i] = d.alert ? 1 : 0
       radius[i] = Math.max(9, size[i] * 0.6)
     })
     const g = new THREE.BufferGeometry()
@@ -160,7 +151,6 @@ export function DisasterLayer({
     g.setAttribute("aIcon", new THREE.BufferAttribute(icon, 1))
     g.setAttribute("aAge", new THREE.BufferAttribute(age, 1))
     g.setAttribute("aColor", new THREE.BufferAttribute(color, 3))
-    g.setAttribute("aRing", new THREE.BufferAttribute(ring, 1))
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1.01)
     return { geometry: g, xyz, radius }
   }, [events, theme, now])
@@ -169,7 +159,7 @@ export function DisasterLayer({
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
-        uniforms: { uScale: { value: 1 }, uTime: { value: 0 }, uAtlas: { value: getAtlas() } },
+        uniforms: { uScale: { value: 1 }, uTime: { value: 0 }, uAtlas: { value: getAtlas() }, uOutline: { value: new THREE.Vector3() } },
         vertexShader: vertex,
         fragmentShader: fragment,
         transparent: true,
@@ -185,6 +175,9 @@ export function DisasterLayer({
     },
     [material],
   )
+  useEffect(() => {
+    ;(material.uniforms.uOutline.value as THREE.Vector3).set(...hexToRgb(OUTLINE[theme]))
+  }, [material, theme])
 
   // storm and iceberg tracks
   const tracks = useMemo(() => {

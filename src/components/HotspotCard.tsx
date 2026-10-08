@@ -20,8 +20,7 @@ export function HotspotCard({ hotspot, onClose }: { hotspot: Hotspot; onClose: (
       <div className="flex items-start gap-2">
         <div className="flex-1">
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="size-2 rounded-full" style={{ background: style.color }} aria-hidden />
-            <span aria-hidden>{style.icon}</span> {hotspot.level}
+            <style.icon className="size-3.5" style={{ color: style.color }} strokeWidth={2.5} aria-hidden /> {hotspot.level}
           </p>
           <h2 id={titleId} className="text-base font-semibold">
             {hotspot.name}

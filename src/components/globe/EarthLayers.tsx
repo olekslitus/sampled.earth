@@ -1,5 +1,5 @@
 "use client"
-/* eslint-disable react-hooks/immutability --
+/* oxlint-disable react/immutability --
  * three.js materials and uniforms are mutated imperatively inside the r3f frame loop. */
 
 import { useEffect, useMemo, useState } from "react"

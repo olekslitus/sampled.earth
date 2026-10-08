@@ -31,3 +31,5 @@ Natural disasters load live in the browser from USGS, GDACS and NASA EONET. Ever
 - shadcn/ui (Base UI)
 - three.js via @react-three/fiber
 - Bun
+- TypeScript 7
+- Oxlint (`bun run lint`)

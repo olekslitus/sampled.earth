@@ -1,5 +1,5 @@
 "use client"
-/* eslint-disable react-hooks/immutability --
+/* oxlint-disable react/immutability --
  * the camera, controls and the simulation are mutated imperatively inside the r3f frame loop. */
 
 import { useEffect, useMemo, useRef, type RefObject } from "react"

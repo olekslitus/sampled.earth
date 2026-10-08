@@ -351,6 +351,7 @@ export default function SampledEarth() {
         }
         layers={
           <LayersPanel
+            theme={theme}
             showVital={showVital}
             onShowVital={(v) => {
               vitalRef.current = emptyVitalStats()

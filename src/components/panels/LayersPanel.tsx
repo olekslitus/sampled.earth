@@ -6,6 +6,7 @@ import { Baby, PawPrint, RefreshCw, Siren, Tornado } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { AnimalMarker } from "@/components/AnimalMarker"
 import { LEVEL_STYLE } from "@/components/globe/UnrestLayer"
 import { emptyVitalStats, type VitalStats } from "@/components/globe/VitalLayer"
 import { usePolled } from "@/components/hooks"
@@ -13,6 +14,7 @@ import { SPECIES, iconCount, type Species } from "@/lib/sim/animals"
 import { DISASTER_KINDS, bySeverity, type Disaster, type DisasterFeed, type DisasterKind } from "@/lib/disasters"
 import { COUNTRY_BY_NAME } from "@/lib/sim/countries"
 import { HOTSPOTS, UNREST_LEVELS, UNREST_SOURCE_NOTE, type Hotspot } from "@/lib/sim/unrest"
+import type { Theme } from "@/lib/sim/attributes"
 import { cn } from "@/lib/utils"
 import { AlertBadge, KIND_ICON, timeAgo } from "./DisasterCard"
 
@@ -37,6 +39,7 @@ export function speciesHome(s: Species): { lat: number; lon: number; alt: number
 }
 
 interface LayersPanelProps {
+  theme: Theme
   showVital: boolean
   onShowVital: (v: boolean) => void
   /** written by the globe's births & deaths layer; sampled here a few times a second */
@@ -90,7 +93,7 @@ export function LayersPanel(props: LayersPanelProps) {
             </Button>
           )}
         </div>
-        <p className="text-[11px] text-muted-foreground">Rare species are shown one icon per animal; common ones are sampled. Click a name to fly there.</p>
+        <p className="text-[11px] text-muted-foreground">Each species has its own marker shape and colour, shown next to its name. Rare species get one marker per animal; common ones are sampled. Click a name to fly there.</p>
         {GROUPS.map((g) => (
           <div key={g} className="space-y-1">
             <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{g}</p>
@@ -110,10 +113,10 @@ export function LayersPanel(props: LayersPanelProps) {
                         props.onFlyTo(h.lat, h.lon, h.alt)
                       }}
                     >
-                      <span aria-hidden>{s.emoji}</span>
+                      <AnimalMarker species={s.key} theme={props.theme} />
                       <span className="truncate">{s.name}</span>
                     </button>
-                    <span className="shrink-0 tabular-nums text-muted-foreground" title={per > 1 ? `1 icon ≈ ${compact(per)} animals` : "1 icon = 1 animal"}>
+                    <span className="shrink-0 tabular-nums text-muted-foreground" title={per > 1 ? `1 marker ≈ ${compact(per)} animals` : "1 marker = 1 animal"}>
                       {compact(s.population)}
                     </span>
                   </li>
@@ -137,19 +140,22 @@ export function LayersPanel(props: LayersPanelProps) {
         </div>
         <p className="text-[11px] text-muted-foreground">{UNREST_SOURCE_NOTE}</p>
         {props.showUnrest &&
-          UNREST_LEVELS.map((level) => (
-            <div key={level} className="space-y-0.5">
-              <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                <span className="size-2 rounded-full" style={{ background: LEVEL_STYLE[level].color }} />
-                {LEVEL_STYLE[level].icon} {level}
-              </p>
-              {HOTSPOTS.filter((h) => h.level === level).map((h) => (
-                <button key={h.name} className="block w-full rounded-md px-1 py-0.5 text-left text-xs hover:bg-muted" title={h.summary} onClick={() => props.onPickHotspot(h)}>
-                  {h.name}
-                </button>
-              ))}
-            </div>
-          ))}
+          UNREST_LEVELS.map((level) => {
+            const LevelIcon = LEVEL_STYLE[level].icon
+            return (
+              <div key={level} className="space-y-0.5">
+                <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  <LevelIcon className="size-3" style={{ color: LEVEL_STYLE[level].color }} strokeWidth={2.5} aria-hidden />
+                  {level}
+                </p>
+                {HOTSPOTS.filter((h) => h.level === level).map((h) => (
+                  <button key={h.name} className="block w-full rounded-md px-1 py-0.5 text-left text-xs hover:bg-muted" title={h.summary} onClick={() => props.onPickHotspot(h)}>
+                    {h.name}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
       </section>
     </div>
   )

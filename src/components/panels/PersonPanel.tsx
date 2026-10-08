@@ -14,12 +14,13 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { INCOME_BRACKETS, SCHEME_BY_KEY, incomeBracket, paletteFor, schemeColors, type Theme } from "@/lib/sim/attributes"
-import { EDUCATION_LEVELS, REGIONS, flagEmoji } from "@/lib/sim/countries"
+import { EDUCATION_LEVELS, REGIONS } from "@/lib/sim/countries"
 import type { Simulation } from "@/lib/sim/engine"
 import { LEANINGS, PARTY_FAMILIES, familyOf, leaningBucket, politicsOf } from "@/lib/sim/politics"
 import type { Person } from "@/lib/sim/population"
 import { ACTIVITY_CATEGORIES } from "@/lib/sim/schedule"
 import { cn } from "@/lib/utils"
+import { CountryFlag } from "@/components/CountryFlag"
 import { formatHour, formatPeople, formatUSD, weekdayName } from "./format"
 
 
@@ -54,9 +55,7 @@ export function PersonPanel({ theme, sim, id, incomePercentile, follow, onFollow
   return (
     <div className="flex max-h-full flex-col overflow-hidden rounded-xl border border-border bg-card/85 shadow-2xl backdrop-blur-md">
       <div className="flex items-start gap-3 p-4 pb-3">
-        <div className="text-4xl leading-none" aria-hidden>
-          {flagEmoji(c.iso2)}
-        </div>
+        <CountryFlag iso2={c.iso2} height={28} className="mt-0.5 rounded-[3px]" />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-lg font-semibold leading-tight">{p.name}</h2>
           <p className="text-sm text-muted-foreground">
@@ -99,7 +98,7 @@ export function PersonPanel({ theme, sim, id, incomePercentile, follow, onFollow
             <Row icon={p.immigrant ? <Plane /> : <Home />} label="Origin">
               {p.immigrant ? (
                 <>
-                  {flagEmoji(p.origin.iso2)} Immigrant from {p.origin.label}
+                  <CountryFlag iso2={p.origin.iso2} /> Immigrant from {p.origin.label}
                 </>
               ) : (
                 `Born in ${c.label}`

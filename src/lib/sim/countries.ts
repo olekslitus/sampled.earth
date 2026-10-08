@@ -849,10 +849,6 @@ export const DIASPORA_ORIGINS = [
   "Romania", "Russia", "Brazil", "Nepal", "Sri Lanka", "Haiti", "Somalia", "Iran", "Kazakhstan",
 ]
 
-export function flagEmoji(iso2: string): string {
-  return String.fromCodePoint(...[...iso2.toUpperCase()].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65))
-}
-
 /** Crude birth rate (births per 1,000 people per year, World Bank / UN WPP) */
 export function birthRate(c: Country) {
   return c.births

@@ -1,5 +1,5 @@
 "use client"
-/* eslint-disable react-hooks/immutability --
+/* oxlint-disable react/immutability --
  * three.js buffers, materials and the simulation are mutated imperatively inside the r3f
  * frame loop, which is how r3f is meant to be used. */
 
